@@ -210,6 +210,59 @@ The interpreter uses a pointer IP set to the first byte of the instruction
 
 ## Editing, saving and loading programs
 
+Tha archetypical Basic system, the mythical Dartmouth College implementation of 1964, was based on a time-sharing system that used a keyboard and a printer connected via a terminal line to the central mainframe to accept and provide answers to users commands. No screen but just line-wise editing. The Basic implementations on microcomputers used a keyboard, possibly connected to a TV screen, with different flavors of editing but along these lines: che C64 allowed for some screen editing, while the ZX Spectrum separated the input area (at the bottom of the screen) from the output area.
+
+StrayBasic runs on top of Linux terminals (indeed it can be compiled also on Windows systems, being written in ANSI C, and it should work more or less in the same way) and just prompts for a line and execute the command typed in it. As any '70s interpreter, StrayBasic allows to type in the *direct mode*, thus right from the terminal line, any statement and tries to execute it: some statements cannot be run in this immediate mode and result in an error, though.
+
+To use the interpreter you need first to compile it, which can be done by a command like
+
+    clang -O2 -lm -o straybasic straybasic.c
+
+After that, a file straybasic should appear in the directory where the command has been launched (that needs to be the same where the `straybasic.c` is located) and, by typing
+
+    straybasic
+
+you should see the welcome message and the prompt `>`. Try to type a simple Basic command, such as 
+
+    >print "Hello World!"
+
+and it should work.
+
+Since Basic is a case-insensitive language, you can insert identifiers, such as `print`, with no care about letters, for example `Print`, `PRINT` or even `pRiNt` are all converted to `PRINT` by the interpreter, before being processed. Only text inside strings and comments is preserved as it is inserted, while other text is tokenized and converted to uppercase.
+
+### Editing a program
+
+Of course, typing commands in direct mode is not the only feature of the interpreter: one should write programs and run them, instead. To do that, the program is assembled as a set of lines, where each line is identified by a unique positive integer number: you need to explicitly insert the number, as first item of the line. For example, type in sequence the following:
+
+    >10 LET X$ = "", Y$ = ""
+    >30 FOR I = LEN X$ TO 1 STEP -1
+    >50 NEXT I
+    >40 Y$ = X$(I) + Y$
+    >60 PRINT Y$
+    >20 INPUT X$
+
+You have inserted the lines of a simple program, in this way, even if the order of insertion is not the order of execution: the latter is dictated by the line numbering. To peruse the program, type the `LIST` command:
+
+    >LIST
+    10 LET X$ = "", Y$ = ""
+    20 INPUT X$
+    30 FOR I = LEN X$ TO 1 STEP -1
+    40 Y$ = X$(I) + Y$
+    50 NEXT I
+    60 PRINT Y$
+
+Now the program is shown with the lines in their natural ordering, the one in which, from the first to the latter, will be executed. To execute the program just type `RUN`: after that, the `INPUT` instruction at line 20 will make the program to pause and prompt you to insert a text; type a word and then press ENTER (or RETURN or whatever on your keyboard), then the program will transform the word you typed, stored into variable `X$`, into the word whose letters have been reversed, stored into `Y$`:
+
+    >RUN
+    ? Alpha
+    ahplA
+    >
+
+
+
+
+
+
 ## Working with numbers
 
 In Basic (as in most programming languages) computer memory is not directly accessible, but data can be stored in it and retrieved from it only when associated to symbolic names: a name can be associated to a numerical or string value. To associate a name to a number use the `LET` statement, as in
