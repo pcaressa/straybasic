@@ -22,7 +22,7 @@
 // /////////////////////////////// CONSTANTS /////////////////////////////// //
 
 #define BUF_SIZE (256)
-#define DATA_SIZE (1024)
+#define DATA_SIZE (4096)
 #define ESTACK_SIZE (20)
 #define PROG_SIZE (8192)
 #define RAM_SIZE (65536)
@@ -40,7 +40,7 @@ enum {
         CODE_STOP, CODE_SYS, CODE_THEN, CODE_TO,
     CODE_ENDKEYWORD,
     CODE_STARTOPERATOR,
-        CODE_AMP, CODE_MUL, CODE_PLUS, CODE_MINUS, CODE_NEG, CODE_DIV, CODE_LT,
+        CODE_MUL, CODE_PLUS, CODE_MINUS, CODE_NEG, CODE_DIV, CODE_LT,
         CODE_LEQ, CODE_NEQ, CODE_EQ, CODE_GT, CODE_GEQ, CODE_ABS, CODE_ACS,
         CODE_AND, CODE_ASC, CODE_ATN, CODE_CHRS, CODE_COS, CODE_EXP, CODE_INT,
         CODE_LEFTS, CODE_LEN, CODE_LOG, CODE_MIDS, CODE_NOT, CODE_OR,
@@ -60,16 +60,21 @@ const char *KEYWORDS[] = {
 
 enum {
     ERROR_NONE, ERROR_CANNOT_OPEN_FILE,
-    ERROR_CLOSEPAR_WITHOUT_OPENPAR, ERROR_COMMA_WITHOUT_OPENPAR,
-    ERROR_DOMAIN, ERROR_EQ_EXPECTED,
-    ERROR_IDENTIFIER_EXPECTED, ERROR_ILLEGAL_CONVERSION,
-    ERROR_ILLEGAL_INSTRUCTION, ERROR_ILLEGAL_INSTRUCTION_OUTSIDE_PROGRAM,
-    ERROR_ILLEGAL_LINE_NUMBER, ERROR_OPENPAR_WITHOUT_CLOSEPAR,
-    ERROR_OUT_OF_DATA,
+    ERROR_CHANNEL_BUSY, ERROR_CHANNEL_CLOSED,
+    ERROR_CLOSEPAR_WITHOUT_OPENPAR, ERROR_COMMA_EXPECTED,
+    ERROR_COMMA_WITHOUT_OPENPAR, ERROR_DOMAIN,
+    ERROR_EQ_EXPECTED, ERROR_HASH_EXPECTED,
+    ERROR_IDENTIFIER_EXPECTED, ERROR_ILLEGAL_CHANNEL,
+    ERROR_ILLEGAL_CONVERSION, ERROR_ILLEGAL_INPUT,
+    ERROR_ILLEGAL_INSTRUCTION,
+    ERROR_ILLEGAL_INSTRUCTION_OUTSIDE_PROGRAM,
+    ERROR_ILLEGAL_LINE_NUMBER, ERROR_ILLEGAL_MODE,
+    ERROR_OPENPAR_WITHOUT_CLOSEPAR, ERROR_OUT_OF_DATA,
     ERROR_OUT_OF_STRING_MEMORY, ERROR_OUT_OF_VARIABLE_MEMORY,
     ERROR_PROGRAM_STOPPED, ERROR_PROGRAM_TOO_LONG,
     ERROR_RETURN_WITHOUT_GOSUB, ERROR_STACK_OVERFLOW,
-    ERROR_STACK_UNDERFLOW, ERROR_SUBSCRIPT_ERROR,
+    ERROR_STACK_UNDERFLOW, ERROR_STRING_VARIABLE_EXPECTED,
+    ERROR_SUBSCRIPT_ERROR,
     ERROR_SUBSCRIPT_EXPECTED, ERROR_TOO_MANY_GOSUB,
     ERROR_TYPE_MISMATCH, ERROR_UNDEFINED_VARIABLE,
     ERROR_VARIABLE_ALREADY_DEFINED
@@ -77,16 +82,21 @@ enum {
 
 const char *ERROR[] = {
     "READY", "CANNOT OPEN FILE",
-    "\")\" WITHOUT \"(\"", "\",\" WITHOUT \"(\"",
-    "DOMAIN ERROR", "\"=\" EXPECTED",
-    "IDENTIFIER EXPECTED", "ILLEGAL CONVERSION",
-    "ILLEGAL INSTRUCTION", "ILLEGAL INSTRUCTION OUTSIDE PROGRAM",
-    "ILLEGAL LINE NUMBER", "\"(\" WITHOUT \")\"",
-    "OUT OF DATA",
+    "CHANNEL BUSY", "CHANNEL CLOSED",
+    "\")\" WITHOUT \"(\"", "\",\" EXPECTED",
+    "\",\" WITHOUT \"(\"", "DOMAIN ERROR",
+    "\"=\" EXPECTED", "\"#\" EXPECTED",
+    "IDENTIFIER EXPECTED", "ILLEGAL CHANNEL",
+    "ILLEGAL CONVERSION", "ILLEGAL INPUT",
+    "ILLEGAL INSTRUCTION",
+    "ILLEGAL INSTRUCTION OUTSIDE PROGRAM",
+    "ILLEGAL LINE NUMBER", "ILLEGAL MODE",
+    "\"(\" WITHOUT \")\"", "OUT OF DATA",
     "NO MORE ROOM FOR STRINGS", "NO MORE ROOM FOR VARIABLES",
     "PROGRAM STOPPED", "PROGRAM TOO LONG",
     "RETURN WITHOUT GOSUB", "EXPRESSION TOO LONG",
-    "MISSING VALUE", "SUBSCRIPT OUT OF RANGE",
+    "MISSING VALUE", "STRING VARIABLE EXPECTED",
+    "SUBSCRIPT OUT OF RANGE",
     "MISSING SUBSCRIPT", "TOO MANY NESTED GOSUBS",
     "TYPE MISMATCH", "UNDEFINED VARIABLE",
     "VARIABLE ALREADY DEFINED"
@@ -114,8 +124,16 @@ typedef struct runtime_s
 {
     byte_t ram[RAM_SIZE];
 
+    /*  RAM[dp0:dp] contains string constants;
+        RAM[dp:dt] contains temporary string constants;
+        RAM[pp0:pp] contains the program;
+        RAM[vp0:vp] contains the variables list;
+        RAM[sp0:sp] contains the parameters stack;
+        RAM[rsp0:rsp] contains the return stack;    */
     addr_t dp0, dp, dt, pp0, pp, vp0, vp, sp0, sp, rsp0, rsp;
-    addr_t obj, tib, buf1, buf2, buf3, buf4;
+    
+    //  Object code and file buffers: buf0 is reserved to the terminal.
+    addr_t obj, buf0, buf1, buf2, buf3, buf4;
 
     addr_t ip0;     ///< first byte of the current line (its "size byte).
     addr_t ip;      ///< first byte of next token in the current line.
@@ -135,6 +153,10 @@ typedef struct runtime_s
         int priority;
     } estack[ESTACK_SIZE];
     int estack_next;
+
+    /** I/O files: channels[0] is always stdin or stdout, while channels[i]
+        from i = 1 to 4 are NULL or handles to text files. */
+    FILE *channels[5];
 
 } *runtime_t;
 
@@ -162,11 +184,9 @@ void runtime_epush(runtime_t rt, void (*r)(runtime_t), int p)
     ++ rt->estack_next;
 OUT}
 
-/** Reset the virtual machine: if restart == 1 restart the machine, else
-    preserves current program and data. Return the runtime. */
-runtime_t runtime_reset(runtime_t rt, int restart)
-{IN
-    
+/** Initialize a virtual ram. */
+void runtime_init(runtime_t rt)
+{
     // Memory area limits, always set
     rt->dp0 = 0;
     rt->pp0 = rt->dp0 + DATA_SIZE;
@@ -175,11 +195,36 @@ runtime_t runtime_reset(runtime_t rt, int restart)
     rt->buf3 = rt->buf4 - BUFSIZ;
     rt->buf2 = rt->buf3 - BUFSIZ;
     rt->buf1 = rt->buf2 - BUFSIZ;
-    rt->tib = rt->buf1 - BUFSIZ;
-    rt->obj = rt->tib - BUFSIZ;
+    rt->buf0 = rt->buf1 - BUFSIZ;
+    rt->obj = rt->buf0 - BUFSIZ;
     rt->rsp0 = rt->obj - RSTACK_SIZE;
     rt->sp0 = rt->rsp0 - STACK_SIZE;
 
+    // Drop stacks.
+    rt->rsp = rt->rsp0;
+    rt->sp = rt->sp0;
+    rt->estack_next = 0;
+    rt->error = 0;
+    rt->error_routine = 0;
+
+    // Reset data pointer.
+    rt->data = rt->pp0;
+
+    // Drop variables.
+    rt->vp = rt->vp0;
+    
+    // Drop data and program.
+    rt->dt = rt->dp = rt->dp0;
+    rt->pp = rt->pp0;
+    rt->prog_changed = 0;
+    for (int i = 0; i < 5; ++ i)
+        rt->channels[i] = NULL;
+}
+
+/** Reset the virtual machine: if restart == 1 restart the machine, else
+    preserves current program and data. Return the runtime. */
+runtime_t runtime_reset(runtime_t rt, int restart)
+{IN
     // Drop stacks.
     rt->rsp = rt->rsp0;
     rt->sp = rt->sp0;
@@ -198,6 +243,11 @@ runtime_t runtime_reset(runtime_t rt, int restart)
         rt->dt = rt->dp = rt->dp0;
         rt->pp = rt->pp0;
         rt->prog_changed = 0;
+        for (int i = 1; i < 5; ++ i)
+            if (rt->channels[i] != NULL) {
+                fclose(rt->channels[i]);
+                rt->channels[i] = NULL;
+            }
     }
 OUT return rt;
 }
@@ -342,6 +392,20 @@ OUT}
 #define push_num(rt, n) push(rt, n, NIL)
 #define push_str(rt, s) { assert(s != NIL); push(rt, 0, s); }
 
+/// Address of the number on top of the stack.
+addr_t tos_num(runtime_t rt)
+{
+    ON_ERROR(rt->sp == rt->sp0, ERROR_STACK_UNDERFLOW);
+    return rt->sp - sizeof(num_t);
+}
+
+/// Address of the string on top of the stack.
+addr_t tos_str(runtime_t rt)
+{
+    ON_ERROR(rt->sp == rt->sp0, ERROR_STACK_UNDERFLOW);
+    return rt->sp - sizeof(num_t) - sizeof(str_t);
+}
+
 /** Pop from the return stack the pair (ip0, offset) denoting a position inside
     a program line. */
 void rpop(runtime_t rt, addr_t *ip0, byte_t *offset)
@@ -393,14 +457,14 @@ OUT return k;
 
 /** Add a temporary string to the data area and return its address: if there's
     no more space then return a negative number. */
-int data_add_temp(runtime_t rt, char *p0, int len)
+int data_add_temp(runtime_t rt, char *p, int len)
 {IN
     int k = -1;
     if (rt->dt + len + 1 < rt->pp0) {
         k = rt->dt;
-        memcpy(RAM + k, p0, len);
+        memcpy(RAM + k, p, len);
         RAM[k + len] = '\0';
-        k += len + 1;
+        rt->dt += len + 1;
     }
 OUT return k;
 }
@@ -413,7 +477,6 @@ int data_find(runtime_t rt, char *p0, int len)
     while (s < rt->dp) {
         int len1 = strlen(RAM + s);
         if (len1 == len && memcmp(RAM + s, p0, len) == 0) {
-            //~ return s - dp0;
 OUT         return s;
         }
         s += len1 + 1;
@@ -528,8 +591,9 @@ void prog_repl(runtime_t rt, FILE *f)
     extern int instr_exec(runtime_t);
     extern int tokenize(runtime_t rt);
     while (!feof(f)) {
+dump_variables(rt);
         if (f == stdin) putchar('>');
-        if (fgets(RAM + rt->tib, BUF_SIZE, f) == NULL) break;
+        if (fgets(RAM + rt->buf0, BUF_SIZE, f) == NULL) break;
         tokenize(rt);
         // RAM[rt->obj] = line size.
         if (RAM[rt->obj + 1] == CODE_INTLIT) prog_edit(rt, rt->obj);
@@ -708,9 +772,11 @@ OUT return type;
 
 // //////////////////////// OPERATOR IMPLEMENTATIONS //////////////////////// //
 
+//  Auxiliary functions.
+
 /** Pop two values and compare them returning the result as an integer, the same
     as if strcmp or memcmp has been executed. */
-static int cmp(runtime_t rt)
+static inline int oper_cmp(runtime_t rt)
 {
     num_t n2;
     str_t s2;
@@ -719,21 +785,22 @@ static int cmp(runtime_t rt)
                             : strcmp(RAM + pop_str(rt), RAM + s2);
 }
 
+// Create a temporary string concatenating s1 and s2 and return it.
+static str_t oper_concat(runtime_t rt, str_t s1, str_t s2)
+{
+    // Create the concatenation as temporary string.
+    char *p1 = RAM + s1;
+    unsigned l1 = strlen(p1);
+    char *p2 = RAM + s2;
+    unsigned l2 = strlen(p2);
+    int addr = data_add_temp(rt, p1, l1 + l2);
+    ON_ERROR(addr < 0, ERROR_OUT_OF_STRING_MEMORY);
+    strcpy(RAM + addr + l1, p2);
+    return addr;
+}
+
 void OPER_ABS(runtime_t rt) {IN push_num(rt, fabs(pop_num(rt))); OUT}
 void OPER_ACS(runtime_t rt) {IN push_num(rt, acos(pop_num(rt))); OUT}
-
-void OPER_AMP(runtime_t rt)
-{IN
-    char *s2 = RAM + pop_str(rt);
-    char *s1 = RAM + pop_str(rt);
-    unsigned l1 = strlen(s1), l2 = strlen(s2);
-//~ printf("s1=%s, s2=%s, l1=%u, l2 =%u\n", s1, s2, l1, l2);
-    // Create the concatenation as temporary string.
-    int addr = data_add_temp(rt, s1, l1 + l2);
-    ON_ERROR(addr < 0, ERROR_OUT_OF_STRING_MEMORY);
-    strcpy(s1 + l1, s2);
-    push_str(rt, (byte_t*)s1 - RAM);
-OUT}
 
 void OPER_AND(runtime_t rt)
 {IN
@@ -762,10 +829,10 @@ void OPER_DIV(runtime_t rt)
     push_num(rt, pop_num(rt) / n2);
 OUT}
 
-void OPER_EQ(runtime_t rt) {IN push_num(rt, cmp(rt) == 0); OUT}
+void OPER_EQ(runtime_t rt) {IN push_num(rt, oper_cmp(rt) == 0); OUT}
 void OPER_EXP(runtime_t rt) {IN push_num(rt, exp(pop_num(rt))); OUT}
-void OPER_GEQ(runtime_t rt) {IN push_num(rt, cmp(rt) >= 0); OUT}
-void OPER_GT(runtime_t rt) {IN push_num(rt, cmp(rt) > 0); OUT}
+void OPER_GEQ(runtime_t rt) {IN push_num(rt, oper_cmp(rt) >= 0); OUT}
+void OPER_GT(runtime_t rt) {IN push_num(rt, oper_cmp(rt) > 0); OUT}
 void OPER_INT(runtime_t rt) {IN push_num(rt, floor(pop_num(rt))); OUT}
 
 void OPER_LEFTS(runtime_t rt)
@@ -780,7 +847,7 @@ void OPER_LEFTS(runtime_t rt)
 OUT}
 
 void OPER_LEN(runtime_t rt) {IN push_num(rt, strlen(RAM + pop_str(rt))); OUT}
-void OPER_LEQ(runtime_t rt)  {IN push_num(rt, cmp(rt) <= 0); OUT}
+void OPER_LEQ(runtime_t rt)  {IN push_num(rt, oper_cmp(rt) <= 0); OUT}
 
 void OPER_LOG(runtime_t rt)
 {IN
@@ -789,7 +856,7 @@ void OPER_LOG(runtime_t rt)
     push_num(rt, log(n));
 OUT}
 
-void OPER_LT(runtime_t rt) {IN push_num(rt, cmp(rt) < 0); OUT}
+void OPER_LT(runtime_t rt) {IN push_num(rt, oper_cmp(rt) < 0); OUT}
 
 void OPER_MIDS(runtime_t rt)
 {IN
@@ -817,13 +884,7 @@ void OPER_MUL(runtime_t rt)
 OUT}
 
 void OPER_NEG(runtime_t rt) {IN push_num(rt, -pop_num(rt)); OUT}
-
-void OPER_NEQ(runtime_t rt)
-{IN
-    num_t n2 = pop_num(rt), n1 = pop_num(rt);
-    push_num(rt, n1 != n2);
-OUT}
-
+void OPER_NEQ(runtime_t rt) {IN push_num(rt, oper_cmp(rt) != 0); OUT}
 void OPER_NOT(runtime_t rt) {IN push_num(rt, !pop_num(rt)); OUT}
 
 void OPER_OR(runtime_t rt)
@@ -834,8 +895,17 @@ OUT}
 
 void OPER_PLUS(runtime_t rt)
 {IN
-    num_t n2 = pop_num(rt), n1 = pop_num(rt);
-    push_num(rt, n1 + n2);
+    num_t n1, n2;
+    str_t s1, s2;
+    pop(rt, &n2, &s2);
+    pop(rt, &n1, &s1);
+    if (s1 == NIL) {
+        ON_ERROR(s2 != NIL, ERROR_TYPE_MISMATCH);
+        push_num(rt, n1 + n2);
+    } else {
+        ON_ERROR(s2 == NIL, ERROR_TYPE_MISMATCH);
+        push_str(rt, oper_concat(rt, s1, s2));
+    }
 OUT}
 
 void OPER_POW(runtime_t rt)
@@ -894,7 +964,11 @@ OUT}
 /** The table of all operators: each operator has a name, an OPER_*** function
     implementing it, a flag binary true if the operator is infix, as a + b, or
     prefix as RIGHT$(x$,i), and a priority, used to pop it from the operator
-    stack at the appropriated moment. */
+    stack at the appropriated moment.
+
+    To add a new operator FOO, just add it to the following table, insert the
+    corresponding CODE_FOO constant in the appropriated place and implement the
+    corresponding OPER_FOO function. */
 const struct {
     char name[8];
     void (*routine)(runtime_t);
@@ -902,7 +976,7 @@ const struct {
     short priority;
 } OPERATORS[] = {
     // Ordered according to the name field.
-    {"&", OPER_AMP, 1, 50}, {"*", OPER_MUL, 1, 60},
+    {"*", OPER_MUL, 1, 60},
     {"+", OPER_PLUS, 1, 50}, {"-", OPER_MINUS, 1, 50},
     {"-", OPER_NEG, 0, 70}, {"/", OPER_DIV, 1, 60},
     {"<", OPER_LT, 1, 30}, {"<=", OPER_LEQ, 1, 30},
@@ -943,12 +1017,14 @@ runtime_t expr(runtime_t rt)
     int open_close_match = 0;   // match between opened and closed parentheses.
     rt->dt = rt->dp;            // Reset temporary string area.
     for (;;) {
-        // Prefix operators.
+        // Prefix operators are the non binary ones (or '-' used as prefix).
         while (CODE == CODE_MINUS || CODE > CODE_STARTOPERATOR && CODE < CODE_ENDOPERATOR
         && !OPERATORS[CODE - CODE_STARTOPERATOR - 1].binary) {
             // Convert CODE_MINUS to CODE_NEG when considered as unary.
             int code = (CODE == CODE_MINUS ? CODE_NEG : CODE) - CODE_STARTOPERATOR - 1;
+            // Execute operators on the stack with higher priority
             runtime_epop(rt, OPERATORS[code].priority);
+            // Push the operator on the stack.
             runtime_epush(rt, OPERATORS[code].routine, OPERATORS[code].priority);
             ++ IP;
         }
@@ -1031,41 +1107,62 @@ OUT             return rt;
 OUT return rt;
 }
 
-/** Assign to the variable located at a0 and with value at a1 the value popped
-    from the stack. It expects the '=' symbol at IP. */
-void expr_assign(runtime_t rt, int type, addr_t a0, addr_t a1)
+// /////////////////////// ASSIGNMENT IMPLEMENTATIONS /////////////////////// //
+
+//  To assign a number value use poke_num!!!
+
+/** Assign to the string variable v the string s: the address of the string to
+    overwrite is expected in va, while v contains the first byte of the variable
+    in the variable's list (its size field). */
+void assign_string(runtime_t rt, addr_t v, str_t va, str_t s)
 {IN
-    EXPECT(CODE_EQ, ERROR_EQ_EXPECTED);
-    expr(rt);
-    ON_ERROR(type == VAR_NONE, ERROR_UNDEFINED_VARIABLE);
-    if (type == VAR_NUM) {
-        poke_num(RAM + a1, pop_num(rt));
-OUT     return;
-    }
-    assert(type == VAR_STR);
-    str_t s = pop_str(rt);
-    // a1 points to the first character of the string to overwrite with s.
-    unsigned len_a = strlen(RAM + a1);
+    // va points to the first character of the string to overwrite with s.
+    unsigned len_v = strlen(RAM + va);
     unsigned len_s = strlen(RAM + s);
-    int delta = len_s - len_a;
-    // Check space (if len_s > len_a).
+    int delta = len_s - len_v;
     ON_ERROR(delta >= rt->sp0 - rt->vp, ERROR_OUT_OF_VARIABLE_MEMORY);
     if (delta != 0) {
-//~ printf("a1 = %u, vp = %u\n", a1, rt->vp);
-//~ printf("lena = %u, lens  = %u\n", len_a, len_s);
-//~ printf("memmove(%p, %p, %i);\n",RAM + a1 + len_s, RAM + a1 + len_a, rt->vp - a1 + delta);
         // Reduce/Augment the space for the string.
-        memmove(RAM + a1 + len_s, RAM + a1 + len_a, rt->vp - (a1 + len_a));
+        memmove(RAM + va + len_s, RAM + va + len_v, rt->vp - (va + len_v));
         // Adjust the pointer to the first free byte in the variable area.
         rt->vp += delta;
         // Adjust the size of the variable containing the string.
-        poke(RAM + a0, peek(RAM + a0) + delta);
+        poke(RAM + v, peek(RAM + v) + delta);
     }
     // Finally copy string s on string a1.
-    strcpy(RAM + a1, RAM + s);
+    strcpy(RAM + va, RAM + s);
+OUT}
+
+//~ /** Assign to the variable with given type, located at v and whose value is at
+    //~ address va, the value at address val). */
+//~ void assign(runtime_t rt, int type, addr_t v, addr_t va, addr_t val)
+//~ {IN
+    //~ if (type & VAR_NUM) {
+        //~ poke_num(RAM + va, peek_num(RAM + val));
+    //~ } else {
+        //~ assert(type & VAR_STR);
+        //~ assign_string(rt, v, va, val);
+    //~ }
+//~ OUT}
+
+/** Parse "= expr" and assign the value to the variable of given type, at
+    address v and whose value is at address va. */
+void assign_expr(runtime_t rt, int type, addr_t v, addr_t va)
+{IN
+    ON_ERROR(type == VAR_NONE, ERROR_UNDEFINED_VARIABLE);
+    EXPECT(CODE_EQ, ERROR_EQ_EXPECTED);
+    expr(rt);
+    if (type & VAR_NUM) {
+        poke_num(RAM + va, pop_num(rt));
+    } else {
+        assert(type & VAR_STR);
+        assign_string(rt, v, va, pop_str(rt));
+    }
 OUT}
 
 // ////////////////////// INSTRUCTION IMPLEMENTATIONS ////////////////////// //
+
+//  Auxiliary functions.
 
 /// Set rt->ip and rt->ipn to execute the line at rt->ip0.
 static inline void instr_line(runtime_t rt)
@@ -1073,6 +1170,21 @@ static inline void instr_line(runtime_t rt)
     rt->ipn = rt->ip0 + RAM[rt->ip0];   // next line
     IP = rt->ip0 + 4;               // skip line length + CODE_INTLIT + integer.
 }
+
+/** Parse a possible channel and return the corresponding file and buffer into
+    *file and *buffer. */
+static inline void instr_channel(runtime_t rt, FILE **file, addr_t *buffer)
+{
+    *buffer = rt->buf0; // Terminal buffer
+    if (CODE == '#') {
+        ++ IP;
+        int ch = pop_num(expr(rt));
+        ON_ERROR(ch < 0 || ch > 4, ERROR_ILLEGAL_CHANNEL);
+        ON_ERROR(rt->channels[ch] == NULL, ERROR_CHANNEL_CLOSED);
+        *file = rt->channels[ch];
+        *buffer += ch * BUF_SIZE;
+        EXPECT(',', ERROR_COMMA_EXPECTED);
+}}
 
 void INSTR_BYE(runtime_t rt)
 {IN
@@ -1082,7 +1194,16 @@ void INSTR_BYE(runtime_t rt)
     }
 OUT}
 
-void INSTR_CLOSE(runtime_t rt) {IN assert(!"TODO!"); OUT}
+void INSTR_CLOSE(runtime_t rt)
+{IN
+    // CLOSE #channel
+    EXPECT('#', ERROR_HASH_EXPECTED);
+    int ch = pop_num(expr(rt));
+    ON_ERROR(ch < 1 || ch > 4, ERROR_ILLEGAL_CHANNEL);
+    ON_ERROR(rt->channels[ch] == NULL, ERROR_CHANNEL_CLOSED);
+    fclose(rt->channels[ch]);
+    rt->channels[ch] = NULL;
+OUT}
 
 void INSTR_DATA(runtime_t rt)
 {IN
@@ -1108,6 +1229,7 @@ void INSTR_DIM(runtime_t rt)
 OUT}
 
 void INSTR_ERROR(runtime_t rt) {IN ON_ERROR(1, pop_num(expr(rt))); OUT}
+
 void INSTR_FOR(runtime_t rt) {IN assert(!"TODO!"); OUT}
 
 void INSTR_GOSUB(runtime_t rt)
@@ -1132,7 +1254,43 @@ void INSTR_IF(runtime_t rt)
     ON_ERROR(!(int)pop_num(expr(rt)), ERROR_NONE);
 OUT}
 
-void INSTR_INPUT(runtime_t rt) {IN assert(!"TODO!"); OUT}
+void INSTR_INPUT(runtime_t rt)
+{IN
+    FILE *f = stdin;
+    addr_t b = rt->buf0;    // Terminal buffer
+    instr_channel(rt, &f, &b);
+    ON_ERROR(fgets(RAM + b, BUF_SIZE, f) == NULL, ERROR_ILLEGAL_INPUT);
+    char *p = strchr(RAM + rt->buf0, '\n');
+    if (p != NULL) *p = '\0';   // Drop the ending '\n' if any.
+    // Now parse the text in the buffer and the list of variables.
+    for (byte_t *p = RAM + b; p < RAM + b + BUF_SIZE && *p != '\n' && *p != '\0'; ) {
+        p += strspn(p, " \t");  // skip blanks
+        addr_t v = var_find(rt, IP + 1);
+        ON_ERROR(v == NIL, ERROR_UNDEFINED_VARIABLE);
+        addr_t va;
+        int type = var_address(rt, v, &va);
+        if (type & VAR_NUM) {
+            char *p0 = p;
+            num_t n = strtod(p0, &p);
+            ON_ERROR(p0 == p, ERROR_ILLEGAL_INPUT);
+            poke_num(RAM + va, n);
+        } else {
+            char *p1 = strpbrk(p, ",\n");
+            if (p1 == NULL) assign_string(rt, v, va, p - RAM);
+            else {
+                int c = *p1;
+                *p1 = '\0';
+                assign_string(rt, v, va, p - RAM);
+                *p1 = c;
+            }
+            p = p1;
+        }
+        if (CODE != ',') break;
+        ON_ERROR(*p != ',', ERROR_ILLEGAL_INPUT);
+        ++ IP;
+        ++ p;
+    }
+OUT}
 
 void INSTR_LET(runtime_t rt)
 {IN
@@ -1145,13 +1303,28 @@ void INSTR_LET(runtime_t rt)
         var_insert(rt, peek(RAM + IP + 1), type, 0, 0, 0, 0, 0);
         addr_t va;
         var_address(rt, v, &va);
-        expr_assign(rt, type, v, va);
+        assign_expr(rt, type, v, va);
         if (CODE != ',') break;
         ++ IP;
     }
 OUT}
 
-void INSTR_LINPUT(runtime_t rt) {IN assert(!"TODO!"); OUT}
+void INSTR_LINPUT(runtime_t rt)
+{IN
+    FILE *f = stdin;
+    addr_t b = rt->buf0;    // Terminal buffer
+    instr_channel(rt, &f, &b);
+    addr_t v = var_find(rt, IP + 1);
+    ON_ERROR(v == NIL, ERROR_UNDEFINED_VARIABLE);
+    addr_t va;
+    int type = var_address(rt, v, &va);
+    ON_ERROR(!(type & VAR_STR), ERROR_STRING_VARIABLE_EXPECTED);
+    ON_ERROR(fgets(RAM + b, BUF_SIZE, f) == NULL, ERROR_ILLEGAL_INPUT);
+    char *p = strchr(RAM + b, '\n');
+    if (p != NULL) *p = '\0';   // Drop the ending '\n' if any.
+    // Assign to variable v the value of the string k.
+    assign_string(rt, v, va, b);
+OUT}
 
 void INSTR_LIST(runtime_t rt) {IN prog_print(rt, stdout); OUT}
 
@@ -1174,18 +1347,38 @@ void INSTR_MERGE(runtime_t rt)
 OUT}
 
 void INSTR_NEW(runtime_t rt) {IN if (prog_check(rt)) runtime_reset(rt, 1); OUT}
+
 void INSTR_NEXT(runtime_t rt) {IN assert(!"TODO!"); OUT}
 
-void INSTR_ONERROR(runtime_t rt) {IN rt->error_routine = pop_num(expr(rt)); OUT}
+void INSTR_ONERROR(runtime_t rt)
+{IN
+    int n = pop_num(expr(rt));
+    ON_ERROR(prog_find(rt, n) == NIL, ERROR_ILLEGAL_LINE_NUMBER);
+    rt->error_routine = n;
+OUT}
 
-void INSTR_OPEN(runtime_t rt) {IN assert(!"TODO!"); OUT}
+void INSTR_OPEN(runtime_t rt)
+{IN
+    // OPEN #channel, name, mode
+    // channel and mode are integers, name is a string.
+    EXPECT('#', ERROR_HASH_EXPECTED);
+    int ch = pop_num(expr(rt));
+    ON_ERROR(ch < 1 || ch > 4, ERROR_ILLEGAL_CHANNEL);
+    ON_ERROR(rt->channels[ch] != NULL, ERROR_CHANNEL_BUSY);
+    EXPECT(',', ERROR_COMMA_EXPECTED);
+    str_t name = pop_str(expr(rt));
+    EXPECT(',', ERROR_COMMA_EXPECTED);
+    int mode = pop_num(expr(rt));
+    ON_ERROR(mode < 0 || mode > 2, ERROR_ILLEGAL_MODE);
+    rt->channels[ch] = fopen(RAM + name, mode == 0 ? "r" : mode == 1 ? "w" : "a");
+    ON_ERROR(rt->channels[ch] == NULL, ERROR_CANNOT_OPEN_FILE);
+OUT}
 
 void INSTR_PRINT(runtime_t rt)
 {IN
     FILE *f = stdout;
-    if (CODE == '#') {
-        assert(!"TODO!");
-    }
+    addr_t b = rt->buf0;    // Terminal buffer
+    instr_channel(rt, &f, &b);
     int newline = 1;
     while (CODE != 0 && CODE != ':') {
         if (CODE == ',' || CODE == ';') {
@@ -1302,7 +1495,7 @@ Again:
                 ON_ERROR(v == NIL, ERROR_UNDEFINED_VARIABLE);
                 addr_t va;
                 int type = var_address(rt, v, &va);
-                expr_assign(rt, type, v, va);
+                assign_expr(rt, type, v, va);
             } else {
                 ON_ERROR(1, ERROR_ILLEGAL_INSTRUCTION);
     }}} else {
@@ -1400,12 +1593,12 @@ OUT         return (CODE_STARTOPERATOR + 1) + i;
 OUT return 0;
 }
 
-///  Tokenize the contents of tib and store it at obj: return 0 on error.
+///  Tokenize the contents of buf0 and store it at obj: return 0 on error.
 int tokenize(runtime_t rt)
 {
 IN  int k, len;
-    // Encode the tib string at obj.
-    byte_t *p = RAM + rt->tib;
+    // Encode the buf0 string at obj.
+    byte_t *p = RAM + rt->buf0;
     byte_t *q0 = RAM + rt->obj; // The line size will be stored here.
     byte_t *q = q0 + 1;             // The line will be stored here.
     byte_t b;
@@ -1495,7 +1688,7 @@ OUT return 1;
 int main(int npar, char **pars)
 {
 IN  struct runtime_s rt;
-    runtime_reset(&rt, 1);
+    runtime_init(&rt);
     if (npar > 2) {
         puts("USAGE: straybasic [file.bas]");
         return EXIT_FAILURE;
