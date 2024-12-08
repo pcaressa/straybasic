@@ -3,9 +3,9 @@
 /// \date 20241109
 
 //  Old fashioned debug stuff...
-//~ int debug_tab = 0;
-//~ #define IN {++debug_tab;for(int i=0;i<debug_tab;++i)fputc('+',stderr);fprintf(stderr,"> %s:%s:%i\n", __func__, __FILE__, __LINE__);}
-//~ #define OUT {for(int i=0;i<debug_tab;++i)fputc('+',stderr);fprintf(stderr,"< %s:%s:%i\n", __func__, __FILE__, __LINE__);--debug_tab;}
+//~ int debug_tab = -1;
+//~ #define IN {++debug_tab;for(int i=0;i<debug_tab;++i)fputc('|',stderr);fprintf(stderr,"> %s:%s:%i\n", __func__, __FILE__, __LINE__);}
+//~ #define OUT {for(int i=0;i<debug_tab;++i)fputc('|',stderr);fprintf(stderr,"< %s:%s:%i\n", __func__, __FILE__, __LINE__);--debug_tab;}
 #define IN
 #define OUT
 
@@ -19,6 +19,22 @@
 #include <stdio.h>
 #include <string.h>
 
+
+#include <termios.h>
+char inkey(void)
+{
+    struct termios oldt;
+    struct termios newt;
+
+    tcgetattr(0, &oldt);
+    newt = oldt;                        /* Init new settings */
+    newt.c_lflag &= ~(ICANON | ECHO);   /* Change settings */
+    tcsetattr(0, TCSANOW, &newt);       // Set up non waiting mode
+    int c = getchar();
+    tcsetattr(0, TCSANOW, &oldt);       // Restore waiting mode
+    return c;
+}
+
 // /////////////////////////////// CONSTANTS /////////////////////////////// //
 
 #define BUF_SIZE (256)
@@ -29,79 +45,95 @@
 #define RSTACK_SIZE (60)
 #define STACK_SIZE (120)
 
+/** Token codes: keyword and operator codes are in the same ordering as the
+    corresponding items in the OPERATORS and INSTRUCTION_CODE tables are. */
 enum {
     CODE_INTLIT = 128, CODE_NUMLIT, CODE_STRLIT, CODE_IDN, CODE_IDNS,
     CODE_STARTKEYWORD,
         CODE_BYE, CODE_CLOSE, CODE_DATA, CODE_DEF, CODE_DIM, CODE_ERROR,
         CODE_FOR, CODE_GOSUB, CODE_GOTO, CODE_IF, CODE_INPUT, CODE_LET,
         CODE_LINPUT, CODE_LIST, CODE_LOAD, CODE_MERGE, CODE_NEW, CODE_NEXT,
-        CODE_ONERROR, CODE_OPEN, CODE_PRINT, CODE_READ, CODE_REPEAT,
+        CODE_ONERROR, CODE_OPEN, CODE_PRINT, CODE_READ, CODE_REM, CODE_REPEAT,
         CODE_RESTORE, CODE_RETURN, CODE_RUN, CODE_SAVE, CODE_SKIP, CODE_STEP,
-        CODE_STOP, CODE_SYS, CODE_THEN, CODE_TO,
+        CODE_STOP, CODE_SYS, CODE_THEN, CODE_TO, CODE_TRACE,
     CODE_ENDKEYWORD,
     CODE_STARTOPERATOR,
         CODE_MUL, CODE_PLUS, CODE_MINUS, CODE_NEG, CODE_DIV, CODE_LT,
         CODE_LEQ, CODE_NEQ, CODE_EQ, CODE_GT, CODE_GEQ, CODE_ABS, CODE_ACS,
-        CODE_AND, CODE_ASC, CODE_ATN, CODE_CHRS, CODE_COS, CODE_EXP, CODE_INT,
+        CODE_AND, CODE_ASC, CODE_ATN, CODE_CHRS, CODE_COS, CODE_EXP,
+        CODE_INKEYS, CODE_INT,
         CODE_LEFTS, CODE_LEN, CODE_LOG, CODE_MIDS, CODE_NOT, CODE_OR,
-        CODE_RIGHTS, CODE_RND, CODE_SIN, CODE_SQR, CODE_STRS, CODE_TAN,
-        CODE_VAL, CODE_POW,
+        CODE_RIGHTS, CODE_RND, CODE_SIN, CODE_SQR, CODE_STRS, CODE_SUBS,
+        CODE_TAN, CODE_VAL, CODE_POW,
     CODE_ENDOPERATOR,
 };
 
+/** Keywords, in the same ordering as the constant between CODE_STARTKEYWORD and
+    CODE_ENDKEYWORD and items in INSTRUCTION_CODE are. */
 const char *KEYWORDS[] = {
     /*  Same ordering as the constant between CODE_STARTKEYWORD and
         CODE_ENDKEYWORD */
     "BYE", "CLOSE", "DATA", "DEF", "DIM", "ERROR", "FOR", "GOSUB", "GOTO", "IF",
     "INPUT", "LET", "LINPUT", "LIST", "LOAD", "MERGE", "NEW", "NEXT", "ONERROR",
-    "OPEN", "PRINT", "READ", "REPEAT", "RESTORE", "RETURN", "RUN", "SAVE",
-    "SKIP", "STEP", "STOP", "SYS", "THEN", "TO"
+    "OPEN", "PRINT", "READ", "REM", "REPEAT", "RESTORE", "RETURN", "RUN",
+    "SAVE", "SKIP", "STEP", "STOP", "SYS", "THEN", "TO", "TRACE",
 };
 
+/// Error codes: same ordering as the ERROR costants.
 enum {
     ERROR_NONE, ERROR_CANNOT_OPEN_FILE,
     ERROR_CHANNEL_BUSY, ERROR_CHANNEL_CLOSED,
     ERROR_CLOSEPAR_WITHOUT_OPENPAR, ERROR_COMMA_EXPECTED,
     ERROR_COMMA_WITHOUT_OPENPAR, ERROR_DOMAIN,
-    ERROR_EQ_EXPECTED, ERROR_HASH_EXPECTED,
+    ERROR_EOL_INSIDE_STRING, ERROR_EQ_EXPECTED,
+    ERROR_FORVAR, ERROR_FOR_WITHOUT_NEXT,
+    ERROR_HASH_EXPECTED,
     ERROR_IDENTIFIER_EXPECTED, ERROR_ILLEGAL_CHANNEL,
     ERROR_ILLEGAL_CONVERSION, ERROR_ILLEGAL_INPUT,
     ERROR_ILLEGAL_INSTRUCTION,
     ERROR_ILLEGAL_INSTRUCTION_OUTSIDE_PROGRAM,
     ERROR_ILLEGAL_LINE_NUMBER, ERROR_ILLEGAL_MODE,
+    ERROR_NUMVAR,
     ERROR_OPENPAR_WITHOUT_CLOSEPAR, ERROR_OUT_OF_DATA,
     ERROR_OUT_OF_STRING_MEMORY, ERROR_OUT_OF_VARIABLE_MEMORY,
     ERROR_PROGRAM_STOPPED, ERROR_PROGRAM_TOO_LONG,
     ERROR_RETURN_WITHOUT_GOSUB, ERROR_STACK_OVERFLOW,
     ERROR_STACK_UNDERFLOW, ERROR_STRING_VARIABLE_EXPECTED,
-    ERROR_SUBSCRIPT_ERROR,
-    ERROR_SUBSCRIPT_EXPECTED, ERROR_TOO_MANY_GOSUB,
+    ERROR_SUBSCRIPT_ERROR, ERROR_SUBSCRIPT_EXPECTED,
+    ERROR_SYNTAX, ERROR_TO_EXPECTED,
+    ERROR_TOO_MANY_GOSUB,
     ERROR_TYPE_MISMATCH, ERROR_UNDEFINED_VARIABLE,
     ERROR_VARIABLE_ALREADY_DEFINED
 };
 
+/// Error messages corresponding to error codes.
 const char *ERROR[] = {
     "READY", "CANNOT OPEN FILE",
     "CHANNEL BUSY", "CHANNEL CLOSED",
     "\")\" WITHOUT \"(\"", "\",\" EXPECTED",
     "\",\" WITHOUT \"(\"", "DOMAIN ERROR",
-    "\"=\" EXPECTED", "\"#\" EXPECTED",
+    "END OF LINE INSIDE STRING", "\"=\" EXPECTED",
+    "FOR INDEX EXPECTED", "FOR WITHOUT NEXT",
+    "\"#\" EXPECTED",
     "IDENTIFIER EXPECTED", "ILLEGAL CHANNEL",
     "ILLEGAL CONVERSION", "ILLEGAL INPUT",
     "ILLEGAL INSTRUCTION",
     "ILLEGAL INSTRUCTION OUTSIDE PROGRAM",
     "ILLEGAL LINE NUMBER", "ILLEGAL MODE",
+    "NUMERICAL VARIABLE EXPECTED",
     "\"(\" WITHOUT \")\"", "OUT OF DATA",
     "NO MORE ROOM FOR STRINGS", "NO MORE ROOM FOR VARIABLES",
     "PROGRAM STOPPED", "PROGRAM TOO LONG",
     "RETURN WITHOUT GOSUB", "EXPRESSION TOO LONG",
     "MISSING VALUE", "STRING VARIABLE EXPECTED",
-    "SUBSCRIPT OUT OF RANGE",
-    "MISSING SUBSCRIPT", "TOO MANY NESTED GOSUBS",
+    "SUBSCRIPT OUT OF RANGE", "MISSING SUBSCRIPT",
+    "SYNTAX ERROR", "\"TO\" EXPECTED",
+    "TOO MANY NESTED GOSUBS",
     "TYPE MISMATCH", "UNDEFINED VARIABLE",
     "VARIABLE ALREADY DEFINED"
 };
 
+/// Variable types: they are bits in a byte, so & and | apply.
 enum {
     VAR_NONE = 0, VAR_CHR = 1, VAR_NUM = 2, VAR_STR = 4, VAR_FOR = 8,
     VAR_VEC = 16, VAR_MAT = 32
@@ -138,13 +170,14 @@ typedef struct runtime_s
     addr_t ip0;     ///< first byte of the current line (its "size byte).
     addr_t ip;      ///< first byte of next token in the current line.
     addr_t ipn;     ///< first byte of the next line (needed by GOTO etc.).
+    addr_t data_next;   ///< address of item in a DATA statement to READ from.
 
     jmp_buf err_buffer;
 
     int error;          ///< current error code: 0 means "no error".
     int error_routine;  ///< if != 0, on error a GOTO error_routine is executed.
     int prog_changed;   ///< 1 if the program was not saved since last changes.
-    addr_t data;        ///< address of next line to scan for DATA constants.
+    int trace;          ///< 1 if runnig the program lines are printed.
 
     /** Operator stack: contains operator with priorities lower than the one
         under execution, inside an expression. */
@@ -206,9 +239,10 @@ void runtime_init(runtime_t rt)
     rt->estack_next = 0;
     rt->error = 0;
     rt->error_routine = 0;
+    rt->trace = 0;
 
-    // Reset data pointer.
-    rt->data = rt->pp0;
+    // Reset data pointer: points to the first token of the first line.
+    rt->data_next = rt->pp0 + 4;
 
     // Drop variables.
     rt->vp = rt->vp0;
@@ -231,9 +265,10 @@ runtime_t runtime_reset(runtime_t rt, int restart)
     rt->estack_next = 0;
     rt->error = 0;
     rt->error_routine = 0;
+    //~ rt->trace = 0;
 
-    // Reset data pointer.
-    rt->data = rt->pp0;
+    // Reset data pointer: points to the first token of the first line.
+    rt->data_next = rt->pp0 + 4;
 
     // Drop variables.
     rt->vp = rt->vp0;
@@ -406,25 +441,26 @@ addr_t tos_str(runtime_t rt)
     return rt->sp - sizeof(num_t) - sizeof(str_t);
 }
 
-/** Pop from the return stack the pair (ip0, offset) denoting a position inside
+/** Pop from the return stack the pair (ip0, ip) denoting a position inside
     a program line. */
-void rpop(runtime_t rt, addr_t *ip0, byte_t *offset)
+void rpop(runtime_t rt, addr_t *ip0, addr_t *ip)
 {IN
     ON_ERROR(rt->rsp == rt->rsp0, ERROR_RETURN_WITHOUT_GOSUB);
-    rt->rsp -= 3;
+    rt->rsp -= 2*sizeof(addr_t);
     *ip0 = peek(RAM + rt->rsp);
-    *offset = RAM[rt->rsp + 2];
+    *ip = peek(RAM + rt->rsp + sizeof(addr_t));
 OUT}
 
-/** Push on the return stack the pair (ip0, offset) denoting a position inside a
+/** Push on the return stack the pair (ip0, ip) denoting a position inside a
     program line. Offset is stored as a single byte_t*/
-void rpush(runtime_t rt, addr_t ip0, byte_t offset)
+void rpush(runtime_t rt, addr_t ip0, addr_t ip)
 {IN
-    // An item in the rstack takes 3 (sizeof addr + sizeof byte) bytes.
-    ON_ERROR(rt->rsp - rt->rsp0 >= RSTACK_SIZE - 3, ERROR_TOO_MANY_GOSUB);
+    // An item in the rstack takes 4 (2*sizeof addr) bytes.
+    ON_ERROR(rt->rsp - rt->rsp0 >= RSTACK_SIZE - 2*sizeof(addr_t),
+        ERROR_TOO_MANY_GOSUB);
     poke(RAM + rt->rsp, ip0);
-    RAM[rt->rsp + 2] = offset;
-    rt->rsp += 3;
+    poke(RAM + rt->rsp + sizeof(addr_t), ip);
+    rt->rsp += 2*sizeof(addr_t);
 OUT}
 
 // /////////////////////////// DATA (STRING) AREA /////////////////////////// //
@@ -589,11 +625,14 @@ OUT}
 void prog_repl(runtime_t rt, FILE *f)
 {IN
     extern int instr_exec(runtime_t);
-    extern int tokenize(runtime_t rt);
+    extern int tokenize(runtime_t);
     while (!feof(f)) {
-dump_variables(rt);
+//~ dump_variables(rt);
         if (f == stdin) putchar('>');
         if (fgets(RAM + rt->buf0, BUF_SIZE, f) == NULL) break;
+        // Drop the final '\n' from the string.
+        char *p = strchr(RAM + rt->buf0, '\n');
+        if (p != NULL) *p = '\0';
         tokenize(rt);
         // RAM[rt->obj] = line size.
         if (RAM[rt->obj + 1] == CODE_INTLIT) prog_edit(rt, rt->obj);
@@ -616,7 +655,7 @@ void prog_save(runtime_t rt, char *name)
     else {
         prog_print(rt, f);
         fclose(f);
-        rt->prog_changed = 1;
+        rt->prog_changed = 0;
     }
 OUT}
 
@@ -632,7 +671,7 @@ OUT}
         size, name, VAR_STR, s
         size, name, VAR_STR|VAR_VEC, i, s1, ..., si
         size, name, VAR_STR|VAR_MAT, i, j, s11, ..., s1i, ..., sj1, ..., sji
-        size, name, VAR_FOR, n (value), n1 (bound), n2 (step), ip0, ip1 - ip0
+        size, name, VAR_FOR, n (value), n1 (bound), n2 (step), ip0, ip
 
     Here size is a 16 bit unsigned, name the address of a string, n, n1, ...
     numbers, s, s1, ... C-strings (NOT addresses!), i and j 16 bit unsigned.
@@ -641,28 +680,62 @@ OUT}
     where NEXT should jump.
 */
 
+// Some shortcuts: they retrieve the address/value of a variable's field.
+#define VAR_SIZE(v) (peek(RAM + (v)))
+#define VAR_NAME(v) ((v) + sizeof(addr_t))
+#define VAR_TYPE(v) (RAM[(v) + 2*sizeof(addr_t)])
+#define VAR_ADDR(v) ((v) + 2*sizeof(addr_t) + 1)
+
 /// Looks for a variable with name s and return its address, or NIL.
 str_t var_find(runtime_t rt, str_t s)
 {IN
-    for (addr_t p = rt->vp0; p < rt->vp; p += peek(RAM + p))
-        if (strcmp(RAM + p + sizeof(addr_t), RAM + s) == 0) {
-OUT        return p;
-        }
+    char *ss = RAM + peek(RAM + s);
+    for (addr_t v = rt->vp0; v < rt->vp; v += VAR_SIZE(v)) {
+//~ printf("Check %s type %i against %s\n", RAM + peek(RAM + VAR_NAME(v)), VAR_TYPE(v), ss);
+        if (strcmp(RAM + peek(RAM + VAR_NAME(v)), ss) == 0) {
+OUT        return v;
+    }}
 OUT return NIL;
 }
+
+/// Return 1 if the termination condition on the FOR variable is false.
+int var_for_check(runtime_t rt, addr_t v)
+{IN
+    addr_t va = VAR_ADDR(v);
+    num_t value = peek_num(RAM + va);
+    num_t to = peek_num(RAM + va + sizeof(num_t));
+    num_t step = peek_num(RAM + va + 2*sizeof(num_t));
+    return (step > 0) ? value <= to : to <= value;
+OUT}
+
+/** Applies the step to the provided FOR variable and set rt->ip0 and IP
+    to the beginning of the loop if the bound has not yet been surpassed. */
+void var_for_next(runtime_t rt, addr_t v)
+{IN
+    addr_t va = VAR_ADDR(v);
+    // Increase the value by the step
+    num_t value = peek_num(RAM + va);
+    num_t step = peek_num(RAM + va + 2*sizeof(num_t));
+    poke_num(RAM + va, value + step);
+    // If the bound has not been surpassed, jump to ip.
+    if (var_for_check(rt, v)) {
+        rt->ip0 = peek(RAM + va + 3*sizeof(num_t));
+        rt->ipn = rt->ip0 + RAM[rt->ip0];
+        IP = peek(RAM + va + 3*sizeof(num_t) + sizeof(addr_t));
+    }
+OUT}
 
 /** Insert a new variable inside at rt->vp, updating rt->vp. According to the
     type, which is also returned as value, inserts the data from d1 on, while
     name and type, of course, are always inserted. */
 int var_insert(runtime_t rt, addr_t name, int type, num_t d1, num_t d2,
-               num_t step, addr_t ip0, addr_t offset)
+               num_t step, addr_t ip0, addr_t ip)
 {IN
     // Insert the variable: size, name, type, dim1 and possibly dim2 fields.
-    addr_t var = rt->vp;
-    rt->vp += sizeof(addr_t);   // Skip the size field, to be written later.
-    poke(RAM + rt->vp, name);   // Write variable's name address.
-    rt->vp += sizeof(addr_t);   // Skip the name field.
-    RAM[rt->vp++] = type;       // Write the variable type and skip type field.
+    addr_t v = rt->vp;
+    poke(RAM + VAR_NAME(v), name);
+    VAR_TYPE(v) = type;
+    rt->vp = VAR_ADDR(v);
     if (type == VAR_NUM) { poke_num(RAM + rt->vp, 0); rt->vp += sizeof(num_t); }
     else if (type == VAR_STR) RAM[rt->vp++] = '\0';
     else if (type == VAR_FOR) {
@@ -670,7 +743,7 @@ int var_insert(runtime_t rt, addr_t name, int type, num_t d1, num_t d2,
         poke_num(RAM + rt->vp, d2); rt->vp += sizeof(num_t);
         poke_num(RAM + rt->vp, step); rt->vp += sizeof(num_t);
         poke(RAM + rt->vp, ip0); rt->vp += sizeof(addr_t);
-        poke(RAM + rt->vp, offset); rt->vp += sizeof(addr_t);
+        poke(RAM + rt->vp, ip); rt->vp += sizeof(addr_t);
     } else {
         // array
         int numerical = type & VAR_NUM;
@@ -682,14 +755,15 @@ int var_insert(runtime_t rt, addr_t name, int type, num_t d1, num_t d2,
         // Allocates the actual array items.
         if (numerical) {
             for (int i = 0; i < d1*d2; ++ i) {
-                poke_num(RAM + rt->vp, 0); rt->vp += sizeof(num_t);
+                poke_num(RAM + rt->vp, 0);
+                rt->vp += sizeof(num_t);
             }
         } else {
             memset(RAM + rt->vp, 0, size);
             rt->vp += size;
     }}
     // Finally writes the size field of the variable.
-    RAM[var] = rt->vp - var;
+    poke(RAM + v, rt->vp - v);
     return type;
 OUT}
 
@@ -761,7 +835,7 @@ int var_address(runtime_t rt, addr_t v, addr_t *va)
 {IN
     IP += 1 + sizeof(addr_t);           // Skip the variable's name
     addr_t p = v + 2*sizeof(addr_t);    // p points to the variable type.
-    int type = RAM[p++];      
+    int type = RAM[p++];
     if (type & (VAR_VEC|VAR_MAT)) {
 OUT     return var_array_address(rt, type, p, va);
     }
@@ -777,13 +851,13 @@ OUT return type;
 /** Pop two values and compare them returning the result as an integer, the same
     as if strcmp or memcmp has been executed. */
 static inline int oper_cmp(runtime_t rt)
-{
+{IN
     num_t n2;
     str_t s2;
     pop(rt, &n2, &s2);
     return (s2 == NIL) ? pop_num(rt) - n2
                             : strcmp(RAM + pop_str(rt), RAM + s2);
-}
+OUT}
 
 // Create a temporary string concatenating s1 and s2 and return it.
 static str_t oper_concat(runtime_t rt, str_t s1, str_t s2)
@@ -833,6 +907,13 @@ void OPER_EQ(runtime_t rt) {IN push_num(rt, oper_cmp(rt) == 0); OUT}
 void OPER_EXP(runtime_t rt) {IN push_num(rt, exp(pop_num(rt))); OUT}
 void OPER_GEQ(runtime_t rt) {IN push_num(rt, oper_cmp(rt) >= 0); OUT}
 void OPER_GT(runtime_t rt) {IN push_num(rt, oper_cmp(rt) > 0); OUT}
+
+void OPER_INKEYS(runtime_t rt)
+{IN
+    push_num(rt, inkey());
+    OPER_CHRS(rt);
+OUT}
+
 void OPER_INT(runtime_t rt) {IN push_num(rt, floor(pop_num(rt))); OUT}
 
 void OPER_LEFTS(runtime_t rt)
@@ -950,6 +1031,22 @@ void OPER_STRS(runtime_t rt)
     push_str(rt, addr);
 OUT}
 
+void OPER_SUBS(runtime_t rt)
+{IN
+    // SUB$(x$, i, j) = substring of x$ from i-th to j-th character (included).
+    int j = pop_num(rt) - 1;
+    int i = pop_num(rt) - 1;
+    char *s = RAM + pop_str(rt);
+    int len = strlen(s);
+    if (j < i) j = i - 1;
+    ON_ERROR(j < 0 || j >= len, ERROR_SUBSCRIPT_ERROR);
+    ON_ERROR(i < 0 || i >= len, ERROR_SUBSCRIPT_ERROR);
+    // Create the substring as temporaty string.
+    int addr = data_add_temp(rt, s + i, j - i + 1);
+    ON_ERROR(addr < 0, ERROR_OUT_OF_STRING_MEMORY);
+    push_str(rt, addr);
+OUT}
+
 void OPER_TAN(runtime_t rt) {IN push_num(rt, tan(pop_num(rt))); OUT}
 
 void OPER_VAL(runtime_t rt)
@@ -965,7 +1062,6 @@ OUT}
     implementing it, a flag binary true if the operator is infix, as a + b, or
     prefix as RIGHT$(x$,i), and a priority, used to pop it from the operator
     stack at the appropriated moment.
-
     To add a new operator FOO, just add it to the following table, insert the
     corresponding CODE_FOO constant in the appropriated place and implement the
     corresponding OPER_FOO function. */
@@ -986,15 +1082,217 @@ const struct {
     {"AND", OPER_AND, 1, 10}, {"ASC", OPER_ASC, 0, 100},
     {"ATN", OPER_ATN, 0, 100}, {"CHR$", OPER_CHRS, 0, 100},
     {"COS", OPER_COS, 0, 100}, {"EXP", OPER_EXP, 0, 100},
+    {"INKEY$", OPER_INKEYS, 0, 100},
     {"INT", OPER_INT, 0, 100}, {"LEFT$", OPER_LEFTS, 0, 100},
     {"LEN", OPER_LEN, 0, 100}, {"LOG", OPER_LOG, 0, 100}, 
     {"MID$", OPER_MIDS, 0, 100}, {"NOT", OPER_NOT, 0, 20},
     {"OR", OPER_OR, 1, 10}, {"RIGHT$", OPER_RIGHTS, 0, 100},
     {"RND", OPER_RND, 0, 100}, {"SIN", OPER_SIN, 0, 100},
     {"SQR", OPER_SQR, 0, 100}, {"STR$", OPER_STRS, 0, 100},
+    {"SUB$", OPER_SUBS, 0, 100},
     {"TAN", OPER_TAN, 0, 100}, {"VAL", OPER_VAL, 0, 100},
     {"^", OPER_POW, 1, 80},
 };
+
+// //////////////////////////// LEXICAL ANALIZER //////////////////////////// //
+
+/// Print a token at address a on file f: return the address of next token.
+addr_t token_dump(runtime_t rt, addr_t a, FILE *f)
+{
+IN  static int space = 0;   // True if a space is the last dumped character.
+    byte_t b = RAM[a++];
+    if (b == CODE_IDN || b == CODE_IDNS) {
+        fprintf(f, "%s", RAM + peek(RAM + a));
+        a += 2;
+        space = 0;
+    } else if (b == CODE_INTLIT) {
+        fprintf(f, "%i", peek(RAM + a));
+        a += 2;
+        space = 0;
+    } else if (b == CODE_NUMLIT) {
+        fprintf(f, "%g", peek_num(RAM + a));
+        a += sizeof(num_t);
+        space = 0;
+    } else if (b == CODE_STRLIT) {
+        fprintf(f, "\"%s\"", RAM + peek(RAM + a));
+        a += 2;
+        space = 0;
+    } else if (b == '\'') {
+        fputs(RAM + a - 1, f);
+        a += strlen(RAM + a);   // points to the ending '\0'
+        space = 0;
+    } else if (b > CODE_STARTKEYWORD && b < CODE_ENDKEYWORD) {
+        if (b == CODE_DATA || b == CODE_REM) {
+            fprintf(f, "%s%s", KEYWORDS[b - CODE_STARTKEYWORD - 1], RAM + a);
+            a += strlen(RAM + a);   // points to the ending '\0'
+        } else {
+            if (!space) fputc(' ', f);
+            fprintf(f, "%s ", KEYWORDS[b - CODE_STARTKEYWORD - 1]);
+            space = 1;
+        }
+    } else if (b > CODE_STARTOPERATOR && b < CODE_ENDOPERATOR) {
+        if (!space) fputc(' ', f);
+        fprintf(f, "%s ", OPERATORS[b - CODE_STARTOPERATOR - 1].name);
+        space = 1;
+    } else if (b != 0) {
+        if (b == '(' || b == ')') {
+            if (space) fputc('\b', f);
+            fputc(b, f);
+            space = 0;
+        } else {
+            //~ if (!space) fputc(' ', f);
+            fputc(b, f);
+            fputc(' ', f);
+            space = 1;
+        }
+    }
+OUT return a;
+}
+
+/** Try to match a keyword with the text at p0, p0[1], ... p0[len-1]: if a
+    match is found then the corresponding keyword code is returned, else 0. */
+static int token_keyword(char *p0, unsigned len)
+{
+IN for (int i = 0; i < CODE_ENDKEYWORD - CODE_STARTKEYWORD - 1; ++ i) {
+        int cmp = memcmp(KEYWORDS[i], p0, len);
+        if (cmp == 0 && len == strlen(KEYWORDS[i])) {
+OUT         return (CODE_STARTKEYWORD + 1) + i;
+        }
+        if (cmp > 0) break;
+    }
+OUT return 0;
+}
+
+/** Try to match an operator with the text at p0, p0[1], ... p0[len-1]: if a
+    match is found then the corresponding operator code is returned, else 0. */
+static int token_operator(char *p0, unsigned len)
+{
+IN  for (int i = 0; i < CODE_ENDOPERATOR - CODE_STARTOPERATOR - 1; ++ i) {
+        int cmp = memcmp(OPERATORS[i].name, p0, len);
+        if (cmp == 0 && OPERATORS[i].name[len] == '\0') {
+OUT         return (CODE_STARTOPERATOR + 1) + i;
+        }
+        if (cmp > 0) break;
+    }
+OUT return 0;
+}
+
+///  Tokenize the contents of buf0 and store it at obj: return 0 on error.
+int tokenize(runtime_t rt)
+{
+IN  int k, len;
+    // Encode the buf0 string at obj.
+    byte_t *p = RAM + rt->buf0;
+    byte_t *q0 = RAM + rt->obj; // The line size will be stored here.
+    byte_t *q = q0 + 1;             // The line will be stored here.
+    byte_t b;
+    while (*p != '\0') {
+        p += strspn(p, " \t");  // Skip blanks.
+        if (*p < 32) ++ p;   // skip non printable
+        else if (*p > 127) {
+            printf("SKIP INVALID ASCII CODE %i\n", *p);
+            ++ p;
+        } else if (isdigit(*p)) {
+            char *p1, *p2;
+            int i = strtol(p, &p1, 10);
+            num_t n = strtod(p, &p2);
+            if (p1 == p2 && i >= -32768 && i < 32768) {
+                *q = CODE_INTLIT;
+                poke(q + 1, i);
+//~ printf("int %i\n", peek(q+1));
+                q += 3;
+                p = p1;
+            } else {
+                *q = CODE_NUMLIT;
+                poke_num(q + 1, n);
+//~ printf("float %g\n", peek_num(q+1));
+                q += 1 + sizeof(num_t);
+                p = p2;
+            }
+        } else if (isalpha(*p)) {
+            // Scan the string and create a new constant.
+            byte_t *p0 = p;
+            byte_t *q1 = q;
+            do {
+                *q1++ = toupper(*p);
+                ++ p;
+            } while (isalnum(*p));
+            if (*p == '$') { *q1 = '$'; ++ p; }
+            len = p - p0;
+            if ((k = token_operator(q, len)) > 0) *q++ = k;
+            // Some keyword are not followed by a tokenized text but by a string
+            //  interpreted/skipped during the execution.
+            else if ((k = token_keyword(q, len)) > 0) {
+                if ((*q++ = k) == CODE_DATA || k == CODE_REM) {
+                    len = strlen(p) + 1;
+                    memcpy(q, p, len);
+                    q += len - 1;
+                    p += len;
+                }
+            } else {
+                if ((k = data_find(rt, q, len)) < 0
+                && (k = data_add(rt, q, len)) < 0) {
+                    puts(ERROR[ERROR_OUT_OF_STRING_MEMORY]);
+OUT                 return 0;
+                }
+                *q = (*q1 == '$') ? CODE_IDNS : CODE_IDN;
+                poke(q + 1, k);
+//~ printf("idn %s\n", ram + peek(q+1));
+                q += 3;
+            }
+        } else if (*p == '\'') {    // Comment.
+            /*  A comment is compiled as '\'' followed by the string
+                with the comment text. */
+            len = strlen(p) + 1;
+            strcpy(q, p);
+            q += len - 1;
+            p += len;
+        } else if (*p == '"') {
+            len = strcspn(++p, "\"");
+            if (p[len] != '"') {
+                puts(ERROR[ERROR_EOL_INSIDE_STRING]);
+OUT             return 0;
+            }
+            if ((k = data_find(rt, p, len)) < 0
+            && (k = data_add(rt, p, len)) < 0) {
+                puts(ERROR[ERROR_OUT_OF_STRING_MEMORY]);
+OUT             return 0;
+            }
+            *q = CODE_STRLIT;
+            poke(q + 1, k);
+            q += 3;
+            p += len + 1;
+        } else if (*p == '<' && p[1] == '=') { *q++ = CODE_LEQ; p += 2; }
+        else if (*p == '<' && p[1] == '>') { *q++ = CODE_NEQ; p += 2; }
+        else if (*p == '>' && p[1] == '=') { *q++ = CODE_GEQ; p += 2; }
+        else if ((k = token_operator(p, 1)) > 0) { *q++ = k; ++ p; }
+        else *q++ = *p++;
+    }
+    *q++ = 0;       // End of line marker
+    *q0 = q - q0;   // Line size
+OUT return 1;
+}
+
+/// If ta points to a token, return the address of the token following it.
+addr_t token_skip(runtime_t rt, addr_t ta)
+{
+IN  byte_t b = RAM[ta];
+    if (b == CODE_IDN || b == CODE_IDNS || b == CODE_INTLIT || b == CODE_STRLIT) {
+        ta += sizeof(addr_t) + 1;
+    } else if (b == CODE_NUMLIT) {
+        ta += sizeof(num_t) + 1;
+    } else if (b == '\'' || b == CODE_DATA || b == CODE_REM) {
+        // These instructions span through the end of the line.
+        // Thus, ta + strlen(RAM + ta) points to the final '\0'.
+//~ printf("CODE %s:", RAM + ta);
+        ta += strlen(RAM + ta); // skip to final 0.
+//~ printf("%i %i %i %i %i\n", RAM[ta+1], RAM[ta+2], RAM[ta+3], RAM[ta+4], RAM[ta+5]);
+        //~ ta += 5;
+    } else if (b != 0) {
+        ++ ta;
+    }
+OUT return ta;
+}
 
 // ///////////////////////// EXPRESSION EVALUATION ///////////////////////// //
 
@@ -1008,6 +1306,52 @@ const struct {
     the estack are popped and executed.
 */
 
+/// Compile a sequence of prefix (unary) operators, if any.
+void expr_prefix_operators(runtime_t rt)
+{
+    // Prefix operators are the non binary ones (or '-' used as prefix).
+    while (CODE == CODE_MINUS || CODE > CODE_STARTOPERATOR
+    && CODE < CODE_ENDOPERATOR
+    && !OPERATORS[CODE - CODE_STARTOPERATOR - 1].binary) {
+        // Convert CODE_MINUS to CODE_NEG when considered as unary.
+        int code = (CODE == CODE_MINUS ? CODE_NEG : CODE) - CODE_STARTOPERATOR - 1;
+        // Execute operators on the stack with higher priority
+        runtime_epop(rt, OPERATORS[code].priority);
+        // Push the operator on the stack.
+        runtime_epush(rt, OPERATORS[code].routine, OPERATORS[code].priority);
+        ++ IP;
+}}
+
+/// Used after an operand to deal with a possible string subscript.
+void expr_str_subscript(runtime_t rt)
+{
+    if (CODE == '(' && peek(RAM + tos_str(rt)) != NIL) {
+        // x$(i TO j) is the same as SUB$(x$, i, j)
+        // x$(i TO) is the same as x$(i TO LEN x$)
+        // x$(TO j) is the same as x$(1 TO j)
+        // x$(i) is the same as x$(i TO i)
+        // Compute or use the default for both i and j
+        ++ IP;
+        if (CODE == CODE_TO) {  // x$(TO j)
+            push_num(rt, 1);    // Missing i set to i by default.
+            ++ IP;              // Skip "TO".
+            expr(rt);           // Push j
+        } else {
+            int len = strlen(RAM + peek(RAM + tos_str(rt)));
+            expr(rt);           // Push i
+            if (CODE == ')') {  // x$(i)
+                // x$(i) = x$(i TO i), so duplicate number on top of stack.
+                push_num(rt, peek_num(RAM + tos_num(rt)));
+            } else {
+                EXPECT(CODE_TO, ERROR_TO_EXPECTED);
+                // x$(i TO j) or x$(i TO)
+                if (CODE != ')') expr(rt); else push_num(rt, len);
+        }}
+        EXPECT(')', ERROR_OPENPAR_WITHOUT_CLOSEPAR);
+        runtime_epush(rt, OPER_SUBS,
+            OPERATORS[CODE_SUBS - CODE_STARTOPERATOR - 1].priority);
+}}
+
 /** Evaluate an expression at rt->ip and leave on the stack the value: return
     the runtime, so that it can be used in expressions (e.g. pop_num(expr(rt))).
     */
@@ -1017,17 +1361,7 @@ runtime_t expr(runtime_t rt)
     int open_close_match = 0;   // match between opened and closed parentheses.
     rt->dt = rt->dp;            // Reset temporary string area.
     for (;;) {
-        // Prefix operators are the non binary ones (or '-' used as prefix).
-        while (CODE == CODE_MINUS || CODE > CODE_STARTOPERATOR && CODE < CODE_ENDOPERATOR
-        && !OPERATORS[CODE - CODE_STARTOPERATOR - 1].binary) {
-            // Convert CODE_MINUS to CODE_NEG when considered as unary.
-            int code = (CODE == CODE_MINUS ? CODE_NEG : CODE) - CODE_STARTOPERATOR - 1;
-            // Execute operators on the stack with higher priority
-            runtime_epop(rt, OPERATORS[code].priority);
-            // Push the operator on the stack.
-            runtime_epush(rt, OPERATORS[code].routine, OPERATORS[code].priority);
-            ++ IP;
-        }
+        expr_prefix_operators(rt);
         /** Operand. */
 //~ printf("OPERAND: CODE = %i\n", CODE);
         switch (CODE) {
@@ -1067,7 +1401,8 @@ runtime_t expr(runtime_t rt)
         default:
             ON_ERROR(1, ERROR_STACK_UNDERFLOW);
         }
-        // Check against closed parentheses
+        expr_str_subscript(rt);
+        // Check against closed parentheses.
         while (CODE == ')') {
             // Pop and execute anything on the stack with priority >= 1.
             runtime_epop(rt, 0);
@@ -1133,18 +1468,6 @@ void assign_string(runtime_t rt, addr_t v, str_t va, str_t s)
     strcpy(RAM + va, RAM + s);
 OUT}
 
-//~ /** Assign to the variable with given type, located at v and whose value is at
-    //~ address va, the value at address val). */
-//~ void assign(runtime_t rt, int type, addr_t v, addr_t va, addr_t val)
-//~ {IN
-    //~ if (type & VAR_NUM) {
-        //~ poke_num(RAM + va, peek_num(RAM + val));
-    //~ } else {
-        //~ assert(type & VAR_STR);
-        //~ assign_string(rt, v, va, val);
-    //~ }
-//~ OUT}
-
 /** Parse "= expr" and assign the value to the variable of given type, at
     address v and whose value is at address va. */
 void assign_expr(runtime_t rt, int type, addr_t v, addr_t va)
@@ -1152,7 +1475,7 @@ void assign_expr(runtime_t rt, int type, addr_t v, addr_t va)
     ON_ERROR(type == VAR_NONE, ERROR_UNDEFINED_VARIABLE);
     EXPECT(CODE_EQ, ERROR_EQ_EXPECTED);
     expr(rt);
-    if (type & VAR_NUM) {
+    if (type & (VAR_NUM|VAR_FOR)) {
         poke_num(RAM + va, pop_num(rt));
     } else {
         assert(type & VAR_STR);
@@ -1160,16 +1483,54 @@ void assign_expr(runtime_t rt, int type, addr_t v, addr_t va)
     }
 OUT}
 
+/** Scan buffer b matching a constant (number, comma ending string or string
+    delimited by double quotes) to the variable at IP: if no error occurs,
+    assigns to the parsed variable the a value scanned from b. The updated
+    pointer to the buffer is returned, pointing to ',' or '\0': if neither ','
+    nor '\0' is found after the constant, NIL is returned. */
+addr_t assign_item(runtime_t rt, addr_t b)
+{
+    // We'll use C string standard functions.
+    byte_t *p = RAM + b;
+    byte_t *p1;
+//~ printf("PARSE INPUT |%s|\n", p);
+    addr_t v = var_find(rt, IP + 1);
+    ON_ERROR(v == NIL, ERROR_UNDEFINED_VARIABLE);
+    addr_t va;
+    int type = var_address(rt, v, &va);
+    //~ while (*p > 0 && *p < 33) ++ p; // skip blanks & control characters.
+    p += strspn(p, " \t\r\f\n");    // skip blanks
+    if (type & (VAR_NUM|VAR_FOR)) {
+        byte_t *p0 = p;
+//~ printf("FROM |%s|\n", p0);
+        num_t n = strtod(p0, &p);
+//~ printf("READ %g\n", n);
+        ON_ERROR(p0 == p, ERROR_ILLEGAL_INPUT);
+        poke_num(RAM + va, n);
+    } else if (*p == '"') {
+        // String between double quotes.
+        ++ p;
+        ON_ERROR((p1 = strchr(p, '"')) == NULL, ERROR_EOL_INSIDE_STRING);
+        // assign_string expects a C-string.
+        *p1 = '\0'; assign_string(rt, v, va, p - RAM); *p1 = '"';
+        p = p1 + 1;
+    } else {
+        // String ending with the line or the next comma.
+        if ((p1 = strchr(p, ',')) == NULL) {
+            assign_string(rt, v, va, p - RAM);
+            p += strlen(p);
+        } else {
+        // assign_string expects a C-string.
+            *p1 = '\0'; assign_string(rt, v, va, p - RAM); *p1 = ',';
+            p = p1;
+    }}
+    p += strspn(p, " \t\r\f\n");    // skip blanks
+    return (*p == ',' || *p == '\0') ? p - RAM : NIL;
+}
+
 // ////////////////////// INSTRUCTION IMPLEMENTATIONS ////////////////////// //
 
 //  Auxiliary functions.
-
-/// Set rt->ip and rt->ipn to execute the line at rt->ip0.
-static inline void instr_line(runtime_t rt)
-{
-    rt->ipn = rt->ip0 + RAM[rt->ip0];   // next line
-    IP = rt->ip0 + 4;               // skip line length + CODE_INTLIT + integer.
-}
 
 /** Parse a possible channel and return the corresponding file and buffer into
     *file and *buffer. */
@@ -1185,6 +1546,41 @@ static inline void instr_channel(runtime_t rt, FILE **file, addr_t *buffer)
         *buffer += ch * BUF_SIZE;
         EXPECT(',', ERROR_COMMA_EXPECTED);
 }}
+
+/// Set rt->ip and rt->ipn to execute the line at rt->ip0.
+static inline void instr_line(runtime_t rt)
+{
+    rt->ipn = rt->ip0 + RAM[rt->ip0];   // next line
+    IP = rt->ip0 + 4;       // skip size (1) + CODE_INTLIT (1) + integer (2).
+}
+
+/** Skip to the instruction following the one pointed by ip. Return the pointer
+    to the next instruction. */
+addr_t instr_skip(runtime_t rt, addr_t ip)
+{
+    // Looks for the next: ':', '\0', '\'' or THEN.
+    while (RAM[ip] != '\0') {
+        if (RAM[ip] == ':' || RAM[ip] == CODE_THEN) return ip + 1;
+        ip = token_skip(rt, ip);
+    }
+    // ip points to the sequence: '\0', size, CODE_INTLIT, i1, i2, ...
+//~ printf("%i %i %i %i %i %i\n", RAM[ip], RAM[ip+1], RAM[ip+2], RAM[ip+3], RAM[ip+4], RAM[ip+5]);
+    return ip + 5;
+}
+
+/** Starting from the address ip, which is supposed to point to the first byte
+    of an instruction in a program line, looks for the instruction whose CODE
+    is code and return a pointer to the token following it, or NIL if no such
+    instruction exists. */
+addr_t instr_lookfor(runtime_t rt, addr_t ip, byte_t code)
+{IN
+    while (ip < rt->pp) {
+//~ printf("LOOK %i IN LINE %i[%i]\n", code, peek(RAM + ip - 2), RAM[ip]);
+        if (RAM[ip] == code) return ip + 1;
+        ip = instr_skip(rt, ip);
+    }
+    return NIL;
+OUT}
 
 void INSTR_BYE(runtime_t rt)
 {IN
@@ -1205,16 +1601,6 @@ void INSTR_CLOSE(runtime_t rt)
     rt->channels[ch] = NULL;
 OUT}
 
-void INSTR_DATA(runtime_t rt)
-{IN
-    ON_ERROR(rt->ipn == NIL, ERROR_ILLEGAL_INSTRUCTION_OUTSIDE_PROGRAM);
-    // Skip to the next line.
-    rt->ip0 = rt->ipn;
-    instr_line(rt);
-OUT}
-
-void INSTR_DEF(runtime_t rt) {IN assert(!"TODO!"); OUT}
-
 void INSTR_DIM(runtime_t rt)
 {IN
     for (;;) {
@@ -1230,13 +1616,61 @@ OUT}
 
 void INSTR_ERROR(runtime_t rt) {IN ON_ERROR(1, pop_num(expr(rt))); OUT}
 
-void INSTR_FOR(runtime_t rt) {IN assert(!"TODO!"); OUT}
+void INSTR_FOR(runtime_t rt)
+{IN
+    // FOR creates its variable if not already defined by another FOR statement.
+    EXPECT(CODE_IDN, ERROR_NUMVAR);
+    addr_t va;
+    addr_t v = var_find(rt, IP);
+    if (v != NIL) {
+        ON_ERROR(VAR_TYPE(v) != VAR_FOR, ERROR_FORVAR);
+    } else {    // Create the variable if it doesn't exist.
+        v = rt->vp;     // The variable will be inserted here.
+        // Set value = bound = 0, step = 1, ip0 = ip = 0.
+        var_insert(rt, peek(RAM + IP), VAR_FOR, 0, 0, 1, 0, 0);
+    }
+    IP += sizeof(addr_t);   // skip the variable's name.
+//~ printf("IP:");for(int i = 0; i < 10; ++i) printf(" %i", RAM[IP+i]);putchar('\n');
+    va = VAR_ADDR(v);
+    assign_expr(rt, VAR_FOR, v, va);
+    EXPECT(CODE_TO, ERROR_TO_EXPECTED);
+    poke_num(RAM + va + sizeof(num_t), pop_num(expr(rt)));
+    if (CODE == CODE_STEP) {
+        ++ IP;
+        poke_num(RAM + va + 2*sizeof(num_t), pop_num(expr(rt)));
+    }
+    // FOR instruction completely parsed: we expect ':', '\'' or '\0'.
+    if (CODE == ':') {
+        // The first loop instruction is on the same line as FOR.
+        ++ IP;
+    } else if (CODE == '\0' || CODE == '\'') {
+        // The first loop instruction is on the next line.
+        rt->ip0 = rt->ipn;
+        instr_line(rt);
+    } else {
+        ON_ERROR(1, ERROR_SYNTAX);
+    }
+    poke(RAM + va + 3*sizeof(num_t), rt->ip0);
+    poke(RAM + va + 3*sizeof(num_t) + sizeof(addr_t), rt->ip);
+    if (!var_for_check(rt, v)) {
+        /*  The condition is initially false, just skip the loop, thus looks for
+            the next "NEXT var" instruction and skip after it. If the FOR-NEXT
+            pair is not matched respecting nestings cross your fingers. */
+        do {
+            IP = instr_lookfor(rt, IP, CODE_NEXT);
+            ON_ERROR(IP == NIL, ERROR_FOR_WITHOUT_NEXT);
+            EXPECT(CODE_IDN, ERROR_NUMVAR);
+        } while (VAR_NAME(va) != peek(RAM + IP));
+        // Ok, we found the matching NEXT: skip after it.
+        IP = instr_skip(rt, IP);
+    }
+OUT}
 
 void INSTR_GOSUB(runtime_t rt)
 {IN
     addr_t a = prog_find(rt, pop_num(expr(rt)));
     ON_ERROR(a == NIL, ERROR_ILLEGAL_LINE_NUMBER);
-    rpush(rt, rt->ip0, IP - rt->ip0);
+    rpush(rt, rt->ip0, IP);
     rt->ip0 = a;
     instr_line(rt);
 OUT}
@@ -1260,50 +1694,32 @@ void INSTR_INPUT(runtime_t rt)
     addr_t b = rt->buf0;    // Terminal buffer
     instr_channel(rt, &f, &b);
     ON_ERROR(fgets(RAM + b, BUF_SIZE, f) == NULL, ERROR_ILLEGAL_INPUT);
-    char *p = strchr(RAM + rt->buf0, '\n');
-    if (p != NULL) *p = '\0';   // Drop the ending '\n' if any.
-    // Now parse the text in the buffer and the list of variables.
-    for (byte_t *p = RAM + b; p < RAM + b + BUF_SIZE && *p != '\n' && *p != '\0'; ) {
-        p += strspn(p, " \t");  // skip blanks
-        addr_t v = var_find(rt, IP + 1);
-        ON_ERROR(v == NIL, ERROR_UNDEFINED_VARIABLE);
-        addr_t va;
-        int type = var_address(rt, v, &va);
-        if (type & VAR_NUM) {
-            char *p0 = p;
-            num_t n = strtod(p0, &p);
-            ON_ERROR(p0 == p, ERROR_ILLEGAL_INPUT);
-            poke_num(RAM + va, n);
-        } else {
-            char *p1 = strpbrk(p, ",\n");
-            if (p1 == NULL) assign_string(rt, v, va, p - RAM);
-            else {
-                int c = *p1;
-                *p1 = '\0';
-                assign_string(rt, v, va, p - RAM);
-                *p1 = c;
-            }
-            p = p1;
-        }
+    // Drop the ending '\n' if any.
+    char *p = strchr(RAM + b, '\n'); if (p != NULL) *p = '\0';
+    // Parse a list of variables and assign values read from buffer b to them.
+    for (;;) {
+        b = assign_item(rt, b);
+        ON_ERROR(b == NIL, ERROR_ILLEGAL_INPUT);
         if (CODE != ',') break;
-        ON_ERROR(*p != ',', ERROR_ILLEGAL_INPUT);
+        ON_ERROR(RAM[b] != ',', ERROR_ILLEGAL_INPUT);
         ++ IP;
-        ++ p;
+        ++ b;
     }
 OUT}
 
 void INSTR_LET(runtime_t rt)
 {IN
+    // LET v[=e], ..., v[=e]
     for (;;) {
+        addr_t va;
         addr_t v = var_find(rt, IP + 1);
 //~ printf("%u %s\n", v, RAM + peek(RAM + IP + 1));
         ON_ERROR(v != NIL, ERROR_VARIABLE_ALREADY_DEFINED);
         v = rt->vp;     // The variable will be inserted here.
         int type = (CODE == CODE_IDN) ? VAR_NUM : VAR_STR;
         var_insert(rt, peek(RAM + IP + 1), type, 0, 0, 0, 0, 0);
-        addr_t va;
         var_address(rt, v, &va);
-        assign_expr(rt, type, v, va);
+        if (CODE == CODE_EQ) assign_expr(rt, type, v, va);
         if (CODE != ',') break;
         ++ IP;
     }
@@ -1320,8 +1736,8 @@ void INSTR_LINPUT(runtime_t rt)
     int type = var_address(rt, v, &va);
     ON_ERROR(!(type & VAR_STR), ERROR_STRING_VARIABLE_EXPECTED);
     ON_ERROR(fgets(RAM + b, BUF_SIZE, f) == NULL, ERROR_ILLEGAL_INPUT);
-    char *p = strchr(RAM + b, '\n');
-    if (p != NULL) *p = '\0';   // Drop the ending '\n' if any.
+    // Drop the ending '\n' if any.
+    char *p = strchr(RAM + b, '\n'); if (p != NULL) *p = '\0';
     // Assign to variable v the value of the string k.
     assign_string(rt, v, va, b);
 OUT}
@@ -1348,7 +1764,16 @@ OUT}
 
 void INSTR_NEW(runtime_t rt) {IN if (prog_check(rt)) runtime_reset(rt, 1); OUT}
 
-void INSTR_NEXT(runtime_t rt) {IN assert(!"TODO!"); OUT}
+void INSTR_NEXT(runtime_t rt)
+{IN
+    EXPECT(CODE_IDN, ERROR_NUMVAR);
+//~ printf("LOOKFOR %s\n", RAM + peek(RAM + IP));
+    addr_t v = var_find(rt, IP);
+    ON_ERROR(v == NIL, ERROR_UNDEFINED_VARIABLE);
+    IP += sizeof(str_t);
+    ON_ERROR(VAR_TYPE(v) != VAR_FOR, ERROR_FORVAR);
+    var_for_next(rt, v);
+OUT}
 
 void INSTR_ONERROR(runtime_t rt)
 {IN
@@ -1380,7 +1805,7 @@ void INSTR_PRINT(runtime_t rt)
     addr_t b = rt->buf0;    // Terminal buffer
     instr_channel(rt, &f, &b);
     int newline = 1;
-    while (CODE != 0 && CODE != ':') {
+    while (CODE != 0 && CODE != ':' && CODE != '\'') {
         if (CODE == ',' || CODE == ';') {
             if (CODE == ',') fputc('\t', f);
             ++ IP;
@@ -1398,15 +1823,22 @@ OUT}
 
 void INSTR_READ(runtime_t rt)
 {IN
-    // Looks for the next DATA instruction from rt->data.
-    while (rt->data < rt->vp0) {
-        if (RAM[rt->data + 4] == CODE_DATA) {
-            // OK: read from this line a sequence of data
-            assert(!"TODO!");
+    /*  rt->data_next points to an instruction keyword, and in this case we
+        check against a DATA, else find the next DATA instruction if any, or
+        points to ',' or '\0' inside a DATA line. */
+    for (;;) {
+//~ printf("ip0 = %i, data_next = %i\n", rt->ip0, rt->data_next);
+        if (RAM[rt->data_next] == CODE_DATA || RAM[rt->data_next] == ',') {
+            ++ rt->data_next;   // Skip DATA or ','.
+        } else {
+            rt->data_next = instr_lookfor(rt, rt->data_next, CODE_DATA);
+            ON_ERROR(rt->data_next == NIL, ERROR_OUT_OF_DATA);
         }
-        rt->data += RAM[rt->data];
+        rt->data_next = assign_item(rt, rt->data_next);
+        ON_ERROR(rt->data_next == NIL, ERROR_SYNTAX);   // Bad DATA syntax.
+        if (CODE != ',') break;
+        ++ IP;  // Skip ','.
     }
-    ON_ERROR(1, ERROR_OUT_OF_DATA);
 OUT}
 
 void INSTR_REPEAT(runtime_t rt)
@@ -1415,13 +1847,22 @@ void INSTR_REPEAT(runtime_t rt)
     IP = rt->ip0 + 4;
 OUT}
 
-void INSTR_RESTORE(runtime_t rt) {IN rt->data = rt->pp0; OUT}
+void INSTR_RESTORE(runtime_t rt)
+{IN
+    // RESTORE [line-number]
+    if (CODE == CODE_INTLIT) {
+        rt->data_next = prog_find(rt, peek(RAM + IP + 1));
+        ON_ERROR(rt->data_next == NIL, ERROR_ILLEGAL_LINE_NUMBER);
+        rt->data_next += 4;
+        IP += 3;
+    } else {
+        rt->data_next = rt->pp0 + 4;
+    }
+OUT}
 
 void INSTR_RETURN(runtime_t rt)
 {IN
-    byte_t offset;
-    rpop(rt, &rt->ip0, &offset);
-    IP = rt->ip0 + offset;
+    rpop(rt, &rt->ip0, &IP);
     rt->ipn = rt->ip0 + RAM[rt->ip0];
 OUT}
 
@@ -1437,6 +1878,13 @@ void INSTR_RUN(runtime_t rt)
     // The increment rt->ipn is set inside the loop.
     for (rt->ip0 = rt->pp0; rt->ip0 < rt->pp; rt->ip0 = rt->ipn) {
         instr_line(rt);
+        if (rt->trace) {
+            printf("EXECUTE LINE % 4i", peek(RAM + rt->ip0 + 2));
+            for (addr_t p = rt->ip0 + 4; RAM[p] != 0; p = token_dump(rt, p, stdout))
+                ;
+            putchar('\n');
+//~ printf("ip0 = %i, ip = %i, ipn = %i\n", rt->ip0, rt->ip, rt->ipn);
+        }
         if (instr_exec(rt)) {
             printf("LINE %i: ", peek(RAM + rt->ip0 + 2));
             break;
@@ -1459,19 +1907,28 @@ OUT}
 void INSTR_STEP(runtime_t rt) {IN ON_ERROR(1, ERROR_ILLEGAL_INSTRUCTION); OUT}
 void INSTR_STOP(runtime_t rt) {IN ON_ERROR(1, ERROR_PROGRAM_STOPPED); OUT}
 void INSTR_SYS(runtime_t rt) {IN system(RAM + pop_str(expr(rt))); OUT}
-void INSTR_THEN(runtime_t rt) {IN OUT}
+
+void INSTR_THEN(runtime_t rt)
+{IN
+    // THEN n is like GOTO n. THEN ... is like :...
+    if (CODE == CODE_INTLIT) INSTR_GOTO(rt);
+OUT}
+
 void INSTR_TO(runtime_t rt) {IN ON_ERROR(1, ERROR_ILLEGAL_INSTRUCTION); OUT}
+void INSTR_TRACE(runtime_t rt) {IN rt->trace = pop_num(expr(rt)); OUT}
 
 /// Table of all routines implementing instructions.
 void (*INSTRUCTION_CODE[])(runtime_t) = {
     /*  Same ordering as the constant between CODE_STARTKEYWORD and
         CODE_ENDKEYWORD */
-    INSTR_BYE, INSTR_CLOSE, INSTR_DATA, INSTR_DEF, INSTR_DIM, INSTR_ERROR,
+    INSTR_BYE, INSTR_CLOSE, INSTR_SKIP /* DATA */, INSTR_SKIP /* DEF */,
+    INSTR_DIM, INSTR_ERROR,
     INSTR_FOR, INSTR_GOSUB, INSTR_GOTO, INSTR_IF, INSTR_INPUT, INSTR_LET,
     INSTR_LINPUT, INSTR_LIST, INSTR_LOAD, INSTR_MERGE, INSTR_NEW, INSTR_NEXT,
-    INSTR_ONERROR, INSTR_OPEN, INSTR_PRINT, INSTR_READ, INSTR_REPEAT,
-    INSTR_RESTORE, INSTR_RETURN, INSTR_RUN, INSTR_SAVE, INSTR_SKIP, INSTR_STEP,
-    INSTR_STOP, INSTR_SYS, INSTR_THEN, INSTR_TO
+    INSTR_ONERROR, INSTR_OPEN, INSTR_PRINT, INSTR_READ, INSTR_SKIP /* REM */,
+    INSTR_REPEAT, INSTR_RESTORE, INSTR_RETURN, INSTR_RUN, INSTR_SAVE,
+    INSTR_SKIP, INSTR_STEP, INSTR_STOP, INSTR_SYS, INSTR_THEN, INSTR_TO,
+    INSTR_TRACE
 };
 
 /** Execute the line at IP0, starting from instruction IP. Return the value of
@@ -1509,178 +1966,7 @@ Again:
     }}}
     // Restore exception buffer.
     memcpy(rt->err_buffer, error_saved, sizeof(error_saved));
-    return rt->error;
-OUT}
-
-// //////////////////////////// LEXICAL ANALIZER //////////////////////////// //
-
-/// Print a token at address a on file f: return the address of next token.
-addr_t token_dump(runtime_t rt, addr_t a, FILE *f)
-{
-IN  static int space = 0;   // True if a space is the last dumped character.
-    byte_t b = RAM[a++];
-    if (b == CODE_IDN || b == CODE_IDNS) {
-        fprintf(f, "%s ", RAM + peek(RAM + a));
-        a += 2;
-        space = 1;
-    } else if (b == CODE_INTLIT) {
-        fprintf(f, "%i", peek(RAM + a));
-        a += 2;
-        space = 0;
-    } else if (b == CODE_NUMLIT) {
-        fprintf(f, "%g", peek_num(RAM + a));
-        a += sizeof(num_t);
-        space = 0;
-    } else if (b == CODE_STRLIT) {
-        fprintf(f, "\"%s\"", RAM + peek(RAM + a));
-        a += 2;
-        space = 0;
-    } else if (b == '\'') {
-        fputs(RAM + a - 1, f);
-        a += strlen(RAM + a) + 1;
-        space = 0;
-    } else if (b == CODE_IDN || b == CODE_IDNS) {
-        fprintf(f, "%s", RAM + peek(RAM + a));
-        a += 2;
-        space = 0;
-    } else if (b > CODE_STARTKEYWORD && b < CODE_ENDKEYWORD) {
-        fprintf(f, "%s ", KEYWORDS[b - CODE_STARTKEYWORD - 1]);
-        space = 1;
-    } else if (b > CODE_STARTOPERATOR && b < CODE_ENDOPERATOR) {
-        if (!space) fputc(' ', f);
-        fprintf(f, "%s ", OPERATORS[b - CODE_STARTOPERATOR - 1].name);
-        space = 1;
-    } else if (b != 0) {
-        if (b == '(' || b == ')') {
-            if (space) fputc('\b', f);
-            fputc(b, f);
-            space = 0;
-        } else {
-            //~ if (!space) fputc(' ', f);
-            fputc(b, f);
-            fputc(' ', f);
-            space = 1;
-        }
-    }
-OUT return a;
-}
-
-/** Try to match a keyword with the text at p0, p0[1], ... p0[len-1]: if a
-    match is found then the corresponding keyword code is returned, else 0. */
-int token_keyword(char *p0, unsigned len)
-{
-IN for (int i = 0; i < CODE_ENDKEYWORD - CODE_STARTKEYWORD - 1; ++ i) {
-        int cmp = memcmp(KEYWORDS[i], p0, len);
-        if (cmp == 0 && len == strlen(KEYWORDS[i])) {
-OUT         return (CODE_STARTKEYWORD + 1) + i;
-        }
-        if (cmp > 0) break;
-    }
-OUT return 0;
-}
-
-/** Try to match an operator with the text at p0, p0[1], ... p0[len-1]: if a
-    match is found then the corresponding operator code is returned, else 0. */
-int token_operator(char *p0, unsigned len)
-{
-IN  for (int i = 0; i < CODE_ENDOPERATOR - CODE_STARTOPERATOR - 1; ++ i) {
-        int cmp = memcmp(OPERATORS[i].name, p0, len);
-        if (cmp == 0 && OPERATORS[i].name[len] == '\0') {
-OUT         return (CODE_STARTOPERATOR + 1) + i;
-        }
-        if (cmp > 0) break;
-    }
-OUT return 0;
-}
-
-///  Tokenize the contents of buf0 and store it at obj: return 0 on error.
-int tokenize(runtime_t rt)
-{
-IN  int k, len;
-    // Encode the buf0 string at obj.
-    byte_t *p = RAM + rt->buf0;
-    byte_t *q0 = RAM + rt->obj; // The line size will be stored here.
-    byte_t *q = q0 + 1;             // The line will be stored here.
-    byte_t b;
-    while (*p != '\n' && *p != '\0') {
-        p += strspn(p, " \t");  // Skip blanks.
-        if (*p > 127) {
-            printf("INVALID ASCII CODE %i\n", *p);
-OUT         return 0;
-        }
-        if (*p < 32) ++ p;   // skip non printable
-        //~ else if (isdigit(*p) || *p == '-' && isdigit(p[1])) {
-        else if (isdigit(*p)) {
-            char *p1, *p2;
-            int i = strtol(p, &p1, 10);
-            num_t n = strtod(p, &p2);
-            if (p1 == p2 && i >= -32768 && i < 32768) {
-                *q = CODE_INTLIT;
-                poke(q + 1, i);
-//~ printf("int %i\n", peek(q+1));
-                q += 3;
-                p = p1;
-            } else {
-                *q = CODE_NUMLIT;
-                poke_num(q + 1, n);
-//~ printf("float %g\n", peek_num(q+1));
-                q += 1 + sizeof(num_t);
-                p = p2;
-            }
-        } else if (isalpha(*p)) {
-            // Scan the string and create a new constant.
-            byte_t *p0 = p;
-            byte_t *q1 = q;
-            do {
-                *q1++ = toupper(*p);
-                ++ p;
-            } while (isalnum(*p));
-            if (*p == '$') { *q1 = '$'; ++ p; }
-            len = p - p0;
-            if ((k = token_keyword(q, len)) > 0) *q++ = k;
-            else if ((k = token_operator(q, len)) > 0) *q++ = k;
-            else {
-                if ((k = data_find(rt, q, len)) < 0
-                && (k = data_add(rt, q, len)) < 0) {
-                    puts("TOO MANY IDENTIFIERS");
-OUT                 return 0;
-                }
-                *q = (*q1 == '$') ? CODE_IDNS : CODE_IDN;
-                poke(q + 1, k);
-//~ printf("idn %s\n", ram + peek(q+1));
-                q += 3;
-            }
-        } else if (*p == '\'') {    // Comment.
-            /*  A comment is compiled as '\'' followed by the string
-                with the comment text. */
-            len = strlen(p) + 1;
-            strcpy(q, p);
-            q += len;
-            p += len;
-        } else if (*p == '"') {
-            len = strcspn(++p, "\"");
-            if (p[len] != '"') {
-                puts("END OF LINE INSIDE STRING");
-OUT             return 0;
-            }
-            if ((k = data_find(rt, p, len)) < 0
-            && (k = data_add(rt, p, len)) < 0) {
-                puts("TOO MANY STRING CONSTANTS");
-OUT             return 0;
-            }
-            *q = CODE_STRLIT;
-            poke(q + 1, k);
-            q += 3;
-            p += len + 1;
-        } else if (*p == '<' && p[1] == '=') { *q++ = CODE_LEQ; p += 2; }
-        else if (*p == '<' && p[1] == '>') { *q++ = CODE_NEQ; p += 2; }
-        else if (*p == '>' && p[1] == '=') { *q++ = CODE_GEQ; p += 2; }
-        else if ((k = token_operator(p, 1)) > 0) { *q++ = k; ++ p; }
-        else *q++ = *p++;
-    }
-    *q++ = 0;       // End of line marker
-    *q0 = q - q0;   // Line size
-OUT return 1;
+OUT return rt->error;
 }
 
 // ////////////////////////////////// MAIN ////////////////////////////////// //
@@ -1702,8 +1988,15 @@ IN  struct runtime_s rt;
             fclose(f);
             rt.prog_changed = 0;
     }}
-    //fputs("\033[2J\033[92m", stdout);   // clear screen, green ink.
-    puts("StrayBasic");
+    // green foreground, black background.
+    fputs("\033[38;2;0;255;0m\033[48;2;0;0;0m", stdout);
+    fputs("\033[2J\033[1;1f", stdout);   // cls, home.
+    puts("//== ====== ||==\\    =  \\\\  // ||==\\    =    //== ||  //=\\");
+    puts("\\\\     ||   ||__/   / \\  \\\\//  ||__/   / \\   \\\\   || ||");
+    puts("  \\\\   ||   ||\\\\   //_\\\\  ||   ||  \\  //_\\\\    \\\\ || ||");
+    puts("==//   ||   || \\\\ //   \\\\ ||   ||==/ //   \\\\ ==// ||  \\\\=/");
+    puts("");
+    //~ puts("StrayBasic");
     puts("(c) 2024 by Paolo Caressa");
     puts("[Type BYE to quit]\n");
     prog_repl(&rt, stdin);
