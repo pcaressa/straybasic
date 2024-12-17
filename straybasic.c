@@ -19,22 +19,6 @@
 #include <stdio.h>
 #include <string.h>
 
-
-#include <termios.h>
-char inkey(void)
-{
-    struct termios oldt;
-    struct termios newt;
-
-    tcgetattr(0, &oldt);
-    newt = oldt;                        /* Init new settings */
-    newt.c_lflag &= ~(ICANON | ECHO);   /* Change settings */
-    tcsetattr(0, TCSANOW, &newt);       // Set up non waiting mode
-    int c = getchar();
-    tcsetattr(0, TCSANOW, &oldt);       // Restore waiting mode
-    return c;
-}
-
 // /////////////////////////////// CONSTANTS /////////////////////////////// //
 
 #define BUF_SIZE (256)
@@ -50,12 +34,13 @@ char inkey(void)
 enum {
     CODE_INTLIT = 128, CODE_NUMLIT, CODE_STRLIT, CODE_IDN, CODE_IDNS,
     CODE_STARTKEYWORD,
-        CODE_BYE, CODE_CLOSE, CODE_DATA, CODE_DEF, CODE_DIM, CODE_ERROR,
-        CODE_FOR, CODE_GOSUB, CODE_GOTO, CODE_IF, CODE_INPUT, CODE_LET,
-        CODE_LINPUT, CODE_LIST, CODE_LOAD, CODE_MERGE, CODE_NEW, CODE_NEXT,
-        CODE_ONERROR, CODE_OPEN, CODE_PRINT, CODE_READ, CODE_REM, CODE_REPEAT,
-        CODE_RESTORE, CODE_RETURN, CODE_RUN, CODE_SAVE, CODE_SKIP, CODE_STEP,
-        CODE_STOP, CODE_SYS, CODE_THEN, CODE_TO, CODE_TRACE,
+        CODE_ATTR, CODE_BYE, CODE_CLOSE, CODE_CLS, CODE_DATA, CODE_DEF,
+        CODE_DIM, CODE_END, CODE_ERROR, CODE_FOR, CODE_GOSUB, CODE_GOTO,
+        CODE_IF, CODE_INPUT, CODE_LET, CODE_LINPUT, CODE_LIST, CODE_LOAD,
+        CODE_MERGE, CODE_NEW, CODE_NEXT, CODE_ONERROR, CODE_OPEN, CODE_PRINT,
+        CODE_READ, CODE_REM, CODE_REPEAT, CODE_RESTORE, CODE_RETURN, CODE_RUN,
+        CODE_SAVE, CODE_SKIP, CODE_STEP, CODE_STOP, CODE_SYS, CODE_THEN,
+        CODE_TO, CODE_TRACE,
     CODE_ENDKEYWORD,
     CODE_STARTOPERATOR,
         CODE_MUL, CODE_PLUS, CODE_MINUS, CODE_NEG, CODE_DIV, CODE_LT,
@@ -73,63 +58,50 @@ enum {
 const char *KEYWORDS[] = {
     /*  Same ordering as the constant between CODE_STARTKEYWORD and
         CODE_ENDKEYWORD */
-    "BYE", "CLOSE", "DATA", "DEF", "DIM", "ERROR", "FOR", "GOSUB", "GOTO", "IF",
-    "INPUT", "LET", "LINPUT", "LIST", "LOAD", "MERGE", "NEW", "NEXT", "ONERROR",
-    "OPEN", "PRINT", "READ", "REM", "REPEAT", "RESTORE", "RETURN", "RUN",
-    "SAVE", "SKIP", "STEP", "STOP", "SYS", "THEN", "TO", "TRACE",
+    "ATTR", "BYE", "CLOSE", "CLS", "DATA", "DEF", "DIM", "END", "ERROR",
+    "FOR", "GOSUB", "GOTO", "IF", "INPUT", "LET", "LINPUT", "LIST", "LOAD",
+    "MERGE", "NEW", "NEXT", "ONERROR", "OPEN", "PRINT", "READ", "REM", "REPEAT",
+    "RESTORE", "RETURN", "RUN", "SAVE", "SKIP", "STEP", "STOP", "SYS", "THEN",
+    "TO", "TRACE",
 };
 
 /// Error codes: same ordering as the ERROR costants.
 enum {
-    ERROR_NONE, ERROR_CANNOT_OPEN_FILE,
-    ERROR_CHANNEL_BUSY, ERROR_CHANNEL_CLOSED,
+    ERROR_NONE, ERROR_CANNOT_OPEN_FILE, ERROR_CHANNEL_BUSY,
+    ERROR_CHANNEL_CLOSED, ERROR_CLOSEPAR_EXPECTED,
     ERROR_CLOSEPAR_WITHOUT_OPENPAR, ERROR_COMMA_EXPECTED,
-    ERROR_COMMA_WITHOUT_OPENPAR, ERROR_DOMAIN,
-    ERROR_EOL_INSIDE_STRING, ERROR_EQ_EXPECTED,
-    ERROR_FORVAR, ERROR_FOR_WITHOUT_NEXT,
-    ERROR_HASH_EXPECTED,
-    ERROR_IDENTIFIER_EXPECTED, ERROR_ILLEGAL_CHANNEL,
-    ERROR_ILLEGAL_CONVERSION, ERROR_ILLEGAL_INPUT,
-    ERROR_ILLEGAL_INSTRUCTION,
-    ERROR_ILLEGAL_INSTRUCTION_OUTSIDE_PROGRAM,
-    ERROR_ILLEGAL_LINE_NUMBER, ERROR_ILLEGAL_MODE,
-    ERROR_NUMVAR,
-    ERROR_OPENPAR_WITHOUT_CLOSEPAR, ERROR_OUT_OF_DATA,
+    ERROR_COMMA_WITHOUT_OPENPAR, ERROR_DOMAIN, ERROR_EOL_INSIDE_STRING,
+    ERROR_EQ_EXPECTED, ERROR_FORVAR, ERROR_FOR_WITHOUT_NEXT,
+    ERROR_HASH_EXPECTED, ERROR_IDENTIFIER_EXPECTED, ERROR_ILLEGAL_ATTRIBUTE,
+    ERROR_ILLEGAL_CHANNEL, ERROR_ILLEGAL_CONVERSION, ERROR_ILLEGAL_INPUT,
+    ERROR_ILLEGAL_INSTRUCTION, ERROR_ILLEGAL_INSTRUCTION_OUTSIDE_PROGRAM,
+    ERROR_ILLEGAL_LINE_NUMBER, ERROR_ILLEGAL_MODE, ERROR_NUMVAR,
+    ERROR_OPENPAR_EXPECTED, ERROR_OPENPAR_WITHOUT_CLOSEPAR, ERROR_OUT_OF_DATA,
     ERROR_OUT_OF_STRING_MEMORY, ERROR_OUT_OF_VARIABLE_MEMORY,
     ERROR_PROGRAM_STOPPED, ERROR_PROGRAM_TOO_LONG,
-    ERROR_RETURN_WITHOUT_GOSUB, ERROR_STACK_OVERFLOW,
-    ERROR_STACK_UNDERFLOW, ERROR_STRING_VARIABLE_EXPECTED,
-    ERROR_SUBSCRIPT_ERROR, ERROR_SUBSCRIPT_EXPECTED,
-    ERROR_SYNTAX, ERROR_TO_EXPECTED,
-    ERROR_TOO_MANY_GOSUB,
-    ERROR_TYPE_MISMATCH, ERROR_UNDEFINED_VARIABLE,
+    ERROR_RETURN_WITHOUT_GOSUB, ERROR_STACK_OVERFLOW, ERROR_STACK_UNDERFLOW,
+    ERROR_STRING_VARIABLE_EXPECTED, ERROR_SUBSCRIPT_ERROR,
+    ERROR_SUBSCRIPT_EXPECTED, ERROR_SYNTAX, ERROR_TO_EXPECTED,
+    ERROR_TOO_MANY_GOSUB, ERROR_TYPE_MISMATCH, ERROR_UNDEFINED_VARIABLE,
     ERROR_VARIABLE_ALREADY_DEFINED
 };
 
 /// Error messages corresponding to error codes.
 const char *ERROR[] = {
-    "READY", "CANNOT OPEN FILE",
-    "CHANNEL BUSY", "CHANNEL CLOSED",
-    "\")\" WITHOUT \"(\"", "\",\" EXPECTED",
-    "\",\" WITHOUT \"(\"", "DOMAIN ERROR",
-    "END OF LINE INSIDE STRING", "\"=\" EXPECTED",
-    "FOR INDEX EXPECTED", "FOR WITHOUT NEXT",
-    "\"#\" EXPECTED",
-    "IDENTIFIER EXPECTED", "ILLEGAL CHANNEL",
-    "ILLEGAL CONVERSION", "ILLEGAL INPUT",
-    "ILLEGAL INSTRUCTION",
-    "ILLEGAL INSTRUCTION OUTSIDE PROGRAM",
-    "ILLEGAL LINE NUMBER", "ILLEGAL MODE",
-    "NUMERICAL VARIABLE EXPECTED",
-    "\"(\" WITHOUT \")\"", "OUT OF DATA",
-    "NO MORE ROOM FOR STRINGS", "NO MORE ROOM FOR VARIABLES",
-    "PROGRAM STOPPED", "PROGRAM TOO LONG",
-    "RETURN WITHOUT GOSUB", "EXPRESSION TOO LONG",
-    "MISSING VALUE", "STRING VARIABLE EXPECTED",
-    "SUBSCRIPT OUT OF RANGE", "MISSING SUBSCRIPT",
-    "SYNTAX ERROR", "\"TO\" EXPECTED",
-    "TOO MANY NESTED GOSUBS",
-    "TYPE MISMATCH", "UNDEFINED VARIABLE",
+    "READY", "CANNOT OPEN FILE", "CHANNEL BUSY", "CHANNEL CLOSED",
+    "\")\" EXPECTED", "\")\" WITHOUT \"(\"", "\",\" EXPECTED",
+    "\",\" WITHOUT \"(\"", "DOMAIN ERROR", "END OF LINE INSIDE STRING",
+    "\"=\" EXPECTED", "FOR INDEX EXPECTED", "FOR WITHOUT NEXT",
+    "\"#\" EXPECTED", "IDENTIFIER EXPECTED", "ILLEGAL ATTRIBUTE",
+    "ILLEGAL CHANNEL", "ILLEGAL CONVERSION", "ILLEGAL INPUT",
+    "ILLEGAL INSTRUCTION", "ILLEGAL INSTRUCTION OUTSIDE PROGRAM",
+    "ILLEGAL LINE NUMBER", "ILLEGAL MODE", "NUMERICAL VARIABLE EXPECTED",
+    "\"(\" EXPECTED", "\"(\" WITHOUT \")\"", "OUT OF DATA",
+    "NO MORE ROOM FOR STRINGS", "NO MORE ROOM FOR VARIABLES", "PROGRAM STOPPED",
+    "PROGRAM TOO LONG", "RETURN WITHOUT GOSUB", "EXPRESSION TOO LONG",
+    "MISSING VALUE", "STRING VARIABLE EXPECTED", "SUBSCRIPT OUT OF RANGE",
+    "MISSING SUBSCRIPT", "SYNTAX ERROR", "\"TO\" EXPECTED",
+    "TOO MANY NESTED GOSUBS", "TYPE MISMATCH", "UNDEFINED VARIABLE",
     "VARIABLE ALREADY DEFINED"
 };
 
@@ -200,11 +172,12 @@ typedef struct runtime_s
 #define ON_ERROR(c, e) if(c) longjmp(rt->err_buffer, rt->error = (e));
 #define EXPECT(tok, msg) ON_ERROR(RAM[IP++] != tok, msg)
 
-/** Pop and execute all routines on the rt->estack with priority > p. */
-void runtime_epop(runtime_t rt, int p)
+/** Pop an operator from the estack and return its routine. */
+void *runtime_epop(runtime_t rt)
 {IN
-    while (rt->estack_next > 0 && rt->estack[rt->estack_next - 1].priority > p)
-        (*rt->estack[--rt->estack_next].routine)(rt);
+    ON_ERROR(rt->estack_next == 0, ERROR_SYNTAX);
+    -- rt->estack_next;
+    return rt->estack[rt->estack_next].routine;
 OUT}
 
 /** Push the routine address r and relative priority p on the estack: while
@@ -215,6 +188,13 @@ void runtime_epush(runtime_t rt, void (*r)(runtime_t), int p)
     rt->estack[rt->estack_next].routine = r;
     rt->estack[rt->estack_next].priority = p;
     ++ rt->estack_next;
+OUT}
+
+/** Pop and execute all routines on the rt->estack with priority > p. */
+void runtime_eunroll(runtime_t rt, int p)
+{IN
+    while (rt->estack_next > 0 && rt->estack[rt->estack_next - 1].priority > p)
+        (*rt->estack[--rt->estack_next].routine)(rt);
 OUT}
 
 /** Initialize a virtual ram. */
@@ -330,12 +310,12 @@ addr_t dump_line(runtime_t rt, addr_t a)
 void dump_memory(runtime_t rt)
 {
     puts("MEMORY OCCUPATION STATUS:");
-    printf("    obj       = % 5i (% 2i%%)\n", RAM[rt->obj], RAM[rt->obj] / BUF_SIZE);
-    printf("    DATA      = % 5i (% 2i%%)\n", rt->dp - rt->dp0, (rt->dp - rt->dp0) / (rt->pp0 - rt->dp0));
-    printf("    PROGRAM   = % 5i (% 2i%%)\n", rt->pp - rt->pp0, (rt->pp - rt->pp0) / (rt->vp0 - rt->pp0));
-    printf("    VARIABLES = % 5i (% 2i%%)\n", rt->vp - rt->vp0, (rt->vp - rt->vp0) / (rt->sp - rt->vp0));
-    printf("    STACK     = % 5i (% 2i%%)\n", rt->sp - rt->sp0, (rt->sp - rt->sp0) / STACK_SIZE);
-    printf("    RSTACK    = % 5i (% 2i%%)\n", rt->rsp - rt->rsp0, (rt->rsp - rt->rsp0) / RSTACK_SIZE);
+    printf("\tobj       = % 5i (% 2i%%)\n", RAM[rt->obj], RAM[rt->obj] / BUF_SIZE);
+    printf("\tDATA      = % 5i (% 2i%%)\n", rt->dp - rt->dp0, (rt->dp - rt->dp0) / (rt->pp0 - rt->dp0));
+    printf("\tPROGRAM   = % 5i (% 2i%%)\n", rt->pp - rt->pp0, (rt->pp - rt->pp0) / (rt->vp0 - rt->pp0));
+    printf("\tVARIABLES = % 5i (% 2i%%)\n", rt->vp - rt->vp0, (rt->vp - rt->vp0) / (rt->sp - rt->vp0));
+    printf("\tSTACK     = % 5i (% 2i%%)\n", rt->sp - rt->sp0, (rt->sp - rt->sp0) / STACK_SIZE);
+    printf("\tRSTACK    = % 5i (% 2i%%)\n", rt->rsp - rt->rsp0, (rt->rsp - rt->rsp0) / RSTACK_SIZE);
 }
 
 void dump_program(runtime_t rt)
@@ -353,18 +333,12 @@ void dump_variables(runtime_t rt)
         addr_t p1 = p + 2*sizeof(addr_t);
         int type = RAM[p1++];
         switch (type) {
-        case VAR_NUM:
-            printf(" = %g\n", peek_num(RAM + p1));
-            continue;
-        case VAR_VEC:
-            printf("(%i)\n", peek(RAM + p1));
-            continue;
+        case VAR_NUM: printf(" = %g\n", peek_num(RAM + p1)); continue;
+        case VAR_VEC: printf("(%i)\n", peek(RAM + p1)); continue;
         case VAR_MAT:
             printf("(%i,%i)\n", peek(RAM + p1), peek(RAM + p1 + sizeof(addr_t)));
             continue;
-        case VAR_STR:
-            printf(" = \"%s\"\n", RAM + p1);
-            continue;
+        case VAR_STR: printf(" = \"%s\"\n", RAM + p1); continue;
         case VAR_FOR:
             printf(" = %g TO %g STEP %g\n", peek_num(RAM + p1),
                 peek_num(RAM + p1 + sizeof(num_t)), peek_num(RAM + p1 + 2*sizeof(num_t)));
@@ -613,7 +587,7 @@ void prog_print(runtime_t rt, FILE *f)
     extern addr_t token_dump(runtime_t rt, addr_t a, FILE *f);
     addr_t p = rt->pp0;
     while (p < rt->pp) {
-        fprintf(f, "%i ", peek(RAM + p + 2));
+        fprintf(f, "% 4i ", peek(RAM + p + 2));
         p += 4;
         while (RAM[p] != 0)
             p = token_dump(rt, p, f);
@@ -685,6 +659,8 @@ OUT}
 #define VAR_NAME(v) ((v) + sizeof(addr_t))
 #define VAR_TYPE(v) (RAM[(v) + 2*sizeof(addr_t)])
 #define VAR_ADDR(v) ((v) + 2*sizeof(addr_t) + 1)
+#define VAR_TO(v) ((v) + 2*sizeof(addr_t) + 1 + sizeof(num_t))
+#define VAR_STEP(v) ((v) + 2*sizeof(addr_t) + 1 + 2*sizeof(num_t))
 
 /// Looks for a variable with name s and return its address, or NIL.
 str_t var_find(runtime_t rt, str_t s)
@@ -701,11 +677,9 @@ OUT return NIL;
 /// Return 1 if the termination condition on the FOR variable is false.
 int var_for_check(runtime_t rt, addr_t v)
 {IN
-    addr_t va = VAR_ADDR(v);
-    num_t value = peek_num(RAM + va);
-    num_t to = peek_num(RAM + va + sizeof(num_t));
-    num_t step = peek_num(RAM + va + 2*sizeof(num_t));
-    return (step > 0) ? value <= to : to <= value;
+    num_t value = peek_num(RAM + VAR_ADDR(v));
+    num_t to = peek_num(RAM + VAR_TO(v));
+    return (peek_num(RAM + VAR_STEP(v)) > 0) ? value <= to : to <= value;
 OUT}
 
 /** Applies the step to the provided FOR variable and set rt->ip0 and IP
@@ -714,9 +688,7 @@ void var_for_next(runtime_t rt, addr_t v)
 {IN
     addr_t va = VAR_ADDR(v);
     // Increase the value by the step
-    num_t value = peek_num(RAM + va);
-    num_t step = peek_num(RAM + va + 2*sizeof(num_t));
-    poke_num(RAM + va, value + step);
+    poke_num(RAM + va, peek_num(RAM + va) + peek_num(RAM + VAR_STEP(v)));
     // If the bound has not been surpassed, jump to ip.
     if (var_for_check(rt, v)) {
         rt->ip0 = peek(RAM + va + 3*sizeof(num_t));
@@ -809,20 +781,25 @@ static int var_array_address(runtime_t rt, int type, addr_t p, addr_t *a1)
     // Parse the subscript(s).
     EXPECT('(', ERROR_SUBSCRIPT_EXPECTED);
     i = pop_num(expr(rt));
+//~ printf("i = %i d1 = %i ", i, d1);
     ON_ERROR(i < 1 || i > d1, ERROR_SUBSCRIPT_ERROR);
     if (is_mat) {
         EXPECT(',', ERROR_SUBSCRIPT_EXPECTED);
         j = pop_num(expr(rt));
+//~ printf("j = %i d2 = %i", j, d2);
         ON_ERROR(j < 1 || j > d2, ERROR_SUBSCRIPT_ERROR);
     }
+//~ printf("\n");
     EXPECT(')', ERROR_OPENPAR_WITHOUT_CLOSEPAR);
     // According to the type, compute the address *a1 of the item.
     if (type & VAR_NUM) {
         *a1 = p + (i-1)*sizeof(num_t) + (j-1)*d1*sizeof(num_t);
-OUT     return VAR_NUM;
+        type = VAR_NUM;
+    } else {
+        *a1 = p + (i-1)*sizeof(str_t) + (j-1)*d1*sizeof(str_t);
+        type = VAR_STR;
     }
-    *a1 = p + (i-1)*sizeof(str_t) + (j-1)*d1*sizeof(str_t);
-OUT return VAR_STR;
+OUT return type;
 }
 
 /** Parse a variable, whose name (the CODE_IDN(S)) is pointed by IP and whose
@@ -835,12 +812,12 @@ int var_address(runtime_t rt, addr_t v, addr_t *va)
 {IN
     IP += 1 + sizeof(addr_t);           // Skip the variable's name
     addr_t p = v + 2*sizeof(addr_t);    // p points to the variable type.
-    int type = RAM[p++];
+    int type = VAR_TYPE(v);
     if (type & (VAR_VEC|VAR_MAT)) {
-OUT     return var_array_address(rt, type, p, va);
+        type = var_array_address(rt, type, VAR_ADDR(v), va);
+    } else {
+        *va = VAR_ADDR(v);              // Scalar or FOR variable: return it!
     }
-    // Scalar or for variable: return it!
-    *va = p;
 OUT return type;
 }
 
@@ -873,6 +850,22 @@ static str_t oper_concat(runtime_t rt, str_t s1, str_t s2)
     return addr;
 }
 
+#include <termios.h>
+//  Get pressed key: Linux specific!
+char oper_inkey(void)
+{
+    struct termios oldt;
+    struct termios newt;
+
+    tcgetattr(0, &oldt);
+    newt = oldt;                        // Init new settings.
+    newt.c_lflag &= ~(ICANON | ECHO);   // Change settings.
+    tcsetattr(0, TCSANOW, &newt);       // Set up non waiting mode.
+    int c = getchar();
+    tcsetattr(0, TCSANOW, &oldt);       // Restore waiting mode.
+    return c;
+}
+
 void OPER_ABS(runtime_t rt) {IN push_num(rt, fabs(pop_num(rt))); OUT}
 void OPER_ACS(runtime_t rt) {IN push_num(rt, acos(pop_num(rt))); OUT}
 
@@ -883,6 +876,21 @@ void OPER_AND(runtime_t rt)
 OUT}
 
 void OPER_ASC(runtime_t rt) {IN push_num(rt, RAM[pop_str(rt)]); OUT}
+
+void OPER_AT(runtime_t rt)
+{IN
+    char *w = getenv("COLUMNS"), *h = getenv("LINES");
+    const int WIDTH = w != NULL ? atoi(w) : 80;
+    const int HEIGHT = h != NULL ? atoi(h) : 24;
+    int col = (int)pop_num(rt) % WIDTH;
+    int row = (int)pop_num(rt) % HEIGHT;
+    printf("\033[%i;%if", row, col);
+    // Press the empty string on the stack.
+    if (rt->dp == rt->dp0) { RAM[rt->dp++] = '\0'; }
+    // Use the ending '\0' of the last string in data area.
+    push_str(rt, rt->dp - 1);
+OUT}
+
 void OPER_ATN(runtime_t rt) {IN push_num(rt, atan(pop_num(rt))); OUT}
 
 void OPER_CHRS(runtime_t rt)
@@ -910,7 +918,7 @@ void OPER_GT(runtime_t rt) {IN push_num(rt, oper_cmp(rt) > 0); OUT}
 
 void OPER_INKEYS(runtime_t rt)
 {IN
-    push_num(rt, inkey());
+    push_num(rt, oper_inkey());
     OPER_CHRS(rt);
 OUT}
 
@@ -1007,12 +1015,7 @@ void OPER_RIGHTS(runtime_t rt)
     push_str(rt, addr);
 OUT}
 
-void OPER_RND(runtime_t rt)
-{IN
-    pop_num(rt);
-    push_num(rt, rand());
-OUT}
-
+void OPER_RND(runtime_t rt) {IN push_num(rt, rand()); OUT}
 void OPER_SIN(runtime_t rt) {IN push_num(rt, sin(pop_num(rt))); OUT}
 
 void OPER_SQR(runtime_t rt)
@@ -1047,6 +1050,17 @@ void OPER_SUBS(runtime_t rt)
     push_str(rt, addr);
 OUT}
 
+void OPER_TAB(runtime_t rt)
+{IN
+    char *w = getenv("COLUMNS");
+    const int WIDTH = w != NULL ? atoi(w) : 80;
+    printf("\033[%iG", (int)pop_num(rt) % WIDTH);
+    // Press the empty string on the stack.
+    if (rt->dp == rt->dp0) { RAM[rt->dp++] = '\0'; }
+    // Use the ending '\0' of the last string in data area.
+    push_str(rt, rt->dp - 1);
+OUT}
+
 void OPER_TAN(runtime_t rt) {IN push_num(rt, tan(pop_num(rt))); OUT}
 
 void OPER_VAL(runtime_t rt)
@@ -1059,39 +1073,59 @@ void OPER_VAL(runtime_t rt)
 OUT}
 
 /** The table of all operators: each operator has a name, an OPER_*** function
-    implementing it, a flag binary true if the operator is infix, as a + b, or
-    prefix as RIGHT$(x$,i), and a priority, used to pop it from the operator
-    stack at the appropriated moment.
+    implementing it, an arity value which is the number of parameters of the
+    operator plus a flag which is set if the operator is infix binary and a
+    priority, used to pop it from the operator stack at the appropriated moment.
     To add a new operator FOO, just add it to the following table, insert the
     corresponding CODE_FOO constant in the appropriated place and implement the
     corresponding OPER_FOO function. */
+#define IS_INFIX (128)
 const struct {
     char name[8];
     void (*routine)(runtime_t);
-    short binary;
-    short priority;
+    byte_t arity;       // # of operator parameters.
+    byte_t infix;       // 1 if the operator is binary infix, else 0.
+    byte_t priority;    // operator priority.
 } OPERATORS[] = {
     // Ordered according to the name field.
-    {"*", OPER_MUL, 1, 60},
-    {"+", OPER_PLUS, 1, 50}, {"-", OPER_MINUS, 1, 50},
-    {"-", OPER_NEG, 0, 70}, {"/", OPER_DIV, 1, 60},
-    {"<", OPER_LT, 1, 30}, {"<=", OPER_LEQ, 1, 30},
-    {"<>", OPER_NEQ, 1, 30}, {"=", OPER_EQ, 1, 30},
-    {">", OPER_GT, 1, 30}, {">=", OPER_GEQ, 1, 30},
-    {"ABS", OPER_ABS, 0, 100}, {"ACS", OPER_ACS, 0, 100},
-    {"AND", OPER_AND, 1, 10}, {"ASC", OPER_ASC, 0, 100},
-    {"ATN", OPER_ATN, 0, 100}, {"CHR$", OPER_CHRS, 0, 100},
-    {"COS", OPER_COS, 0, 100}, {"EXP", OPER_EXP, 0, 100},
-    {"INKEY$", OPER_INKEYS, 0, 100},
-    {"INT", OPER_INT, 0, 100}, {"LEFT$", OPER_LEFTS, 0, 100},
-    {"LEN", OPER_LEN, 0, 100}, {"LOG", OPER_LOG, 0, 100}, 
-    {"MID$", OPER_MIDS, 0, 100}, {"NOT", OPER_NOT, 0, 20},
-    {"OR", OPER_OR, 1, 10}, {"RIGHT$", OPER_RIGHTS, 0, 100},
-    {"RND", OPER_RND, 0, 100}, {"SIN", OPER_SIN, 0, 100},
-    {"SQR", OPER_SQR, 0, 100}, {"STR$", OPER_STRS, 0, 100},
-    {"SUB$", OPER_SUBS, 0, 100},
-    {"TAN", OPER_TAN, 0, 100}, {"VAL", OPER_VAL, 0, 100},
-    {"^", OPER_POW, 1, 80},
+    {"*", OPER_MUL, 2, 1, 60},
+    {"+", OPER_PLUS, 2, 1, 50},
+    {"-", OPER_MINUS, 2, 1, 50},
+    {"-", OPER_NEG, 1, 0, 70},
+    {"/", OPER_DIV, 2, 1, 60},
+    {"<", OPER_LT, 2, 1, 30},
+    {"<=", OPER_LEQ, 2, 1, 30},
+    {"<>", OPER_NEQ, 2, 1, 30},
+    {"=", OPER_EQ, 2, 1, 30},
+    {">", OPER_GT, 2, 1, 30},
+    {">=", OPER_GEQ, 2, 1, 30},
+    {"ABS", OPER_ABS, 1, 0, 100},
+    {"ACS", OPER_ACS, 1, 0, 100},
+    {"AND", OPER_AND, 2, 1, 10},
+    {"ASC", OPER_ASC, 1, 0, 100},
+    {"AT", OPER_AT, 2, 0, 100},
+    {"ATN", OPER_ATN, 1, 0, 100},
+    {"CHR$", OPER_CHRS, 1, 0, 100},
+    {"COS", OPER_COS, 1, 0, 100},
+    {"EXP", OPER_EXP, 1, 0, 100},
+    {"INKEY$", OPER_INKEYS, 0, 0, 100},
+    {"INT", OPER_INT, 1, 0, 100},
+    {"LEFT$", OPER_LEFTS, 2, 0, 100},
+    {"LEN", OPER_LEN, 1, 0, 100},
+    {"LOG", OPER_LOG, 1, 0, 100}, 
+    {"MID$", OPER_MIDS, 3, 0, 100},
+    {"NOT", OPER_NOT, 1, 0, 20},
+    {"OR", OPER_OR, 2, 1, 10},
+    {"RIGHT$", OPER_RIGHTS, 2, 0, 100},
+    {"RND", OPER_RND, 0, 0, 100},
+    {"SIN", OPER_SIN, 1, 0, 100},
+    {"SQR", OPER_SQR, 1, 0, 100},
+    {"STR$", OPER_STRS, 1, 0, 100},
+    {"SUB$", OPER_SUBS, 3, 0, 100},
+    {"TAB", OPER_TAB, 1, 0, 100},
+    {"TAN", OPER_TAN, 1, 0, 100},
+    {"VAL", OPER_VAL, 1, 0, 100},
+    {"^", OPER_POW, 2, 1, 80},
 };
 
 // //////////////////////////// LEXICAL ANALIZER //////////////////////////// //
@@ -1121,19 +1155,21 @@ IN  static int space = 0;   // True if a space is the last dumped character.
         fputs(RAM + a - 1, f);
         a += strlen(RAM + a);   // points to the ending '\0'
         space = 0;
+    } else if (b > CODE_STARTOPERATOR && b < CODE_ENDOPERATOR) {
+        if (!space) fputc(' ', f);
+        fprintf(f, "%s ", OPERATORS[b - CODE_STARTOPERATOR - 1].name);
+        space = 1;
     } else if (b > CODE_STARTKEYWORD && b < CODE_ENDKEYWORD) {
         if (b == CODE_DATA || b == CODE_REM) {
             fprintf(f, "%s%s", KEYWORDS[b - CODE_STARTKEYWORD - 1], RAM + a);
             a += strlen(RAM + a);   // points to the ending '\0'
         } else {
-            if (!space) fputc(' ', f);
+            if (!space && (b == CODE_TO || b == CODE_STEP || b == CODE_THEN)) {
+                fputc(' ', f);
+            }
             fprintf(f, "%s ", KEYWORDS[b - CODE_STARTKEYWORD - 1]);
             space = 1;
         }
-    } else if (b > CODE_STARTOPERATOR && b < CODE_ENDOPERATOR) {
-        if (!space) fputc(' ', f);
-        fprintf(f, "%s ", OPERATORS[b - CODE_STARTOPERATOR - 1].name);
-        space = 1;
     } else if (b != 0) {
         if (b == '(' || b == ')') {
             if (space) fputc('\b', f);
@@ -1307,24 +1343,92 @@ OUT return ta;
 */
 
 /// Compile a sequence of prefix (unary) operators, if any.
-void expr_prefix_operators(runtime_t rt)
+static void expr_prefix_operators(runtime_t rt)
 {
-    // Prefix operators are the non binary ones (or '-' used as prefix).
-    while (CODE == CODE_MINUS || CODE > CODE_STARTOPERATOR
-    && CODE < CODE_ENDOPERATOR
-    && !OPERATORS[CODE - CODE_STARTOPERATOR - 1].binary) {
+IN  // Prefix operators are unary ones (or '-' used as prefix).
+    while (CODE == CODE_MINUS
+    || CODE > CODE_STARTOPERATOR && CODE < CODE_ENDOPERATOR
+    && OPERATORS[CODE - CODE_STARTOPERATOR - 1].arity == 1) {
         // Convert CODE_MINUS to CODE_NEG when considered as unary.
         int code = (CODE == CODE_MINUS ? CODE_NEG : CODE) - CODE_STARTOPERATOR - 1;
         // Execute operators on the stack with higher priority
-        runtime_epop(rt, OPERATORS[code].priority);
+        runtime_eunroll(rt, OPERATORS[code].priority);
         // Push the operator on the stack.
         runtime_epush(rt, OPERATORS[code].routine, OPERATORS[code].priority);
         ++ IP;
-}}
+    }
+OUT }
+
+/** Try to parse an operand from IP: if it fails then return 0, else update IP
+    to the token following the operand. */
+static int expr_operand(runtime_t rt)
+{
+IN  int ok = 1;
+    addr_t v, va;
+    int code = CODE - CODE_STARTOPERATOR - 1;
+    // Check against a built-in function or non infix operator.
+    if (code >= 0 && CODE < CODE_ENDOPERATOR && !OPERATORS[code].infix) {
+        // Execute operators on the stack with higher priority
+        runtime_eunroll(rt, OPERATORS[code].priority);
+        // Push the operator on the stack.
+        runtime_epush(rt, OPERATORS[code].routine, OPERATORS[code].priority);
+        // Parse and push on the stack the function parameters.
+        int arity = OPERATORS[code].arity;
+        ++IP;
+        if (arity == 1) {
+            expr(rt);
+        } else
+        if (arity > 1) {
+            EXPECT('(', ERROR_OPENPAR_EXPECTED);
+            for (int i = 1; i < arity; ++ i) {
+                expr(rt);
+                EXPECT(',', ERROR_COMMA_EXPECTED);
+            }
+            expr(rt);
+            EXPECT(')', ERROR_CLOSEPAR_EXPECTED);
+        }
+    } else
+    switch (CODE) {
+    case '(': {         // Subexpression.
+        ++ IP;
+        expr(rt);
+        EXPECT(')', ERROR_CLOSEPAR_EXPECTED);
+        break;
+    } case CODE_IDN: {  // Numerical variable.
+        ON_ERROR((v = var_find(rt, IP + 1)) == NIL, ERROR_UNDEFINED_VARIABLE);
+//~ printf("EVALUATE VAR %s [%g]\n", RAM + peek(RAM + VAR_NAME(v)), peek_num(RAM + VAR_ADDR(v)));
+        var_address(rt, v, &va);
+        push_num(rt, peek_num(RAM + va));
+        break;
+    } case CODE_IDNS: {
+        ON_ERROR((v = var_find(rt, IP + 1)) == NIL, ERROR_UNDEFINED_VARIABLE);
+        var_address(rt, v, &va);
+        // Make a temporary copy of string va.
+        int s = data_add_temp(rt, RAM + va, strlen(RAM + va));
+        ON_ERROR(s < 0, ERROR_OUT_OF_STRING_MEMORY);
+        push_str(rt, s);
+        break;
+    } case CODE_INTLIT: {
+        push_num(rt, peek(RAM + IP + 1));
+        IP += 1 + sizeof(addr_t);
+        break;
+    } case CODE_NUMLIT: {
+        push_num(rt, peek_num(RAM + IP + 1));
+        IP += 1 + sizeof(num_t);
+        break;
+    } case CODE_STRLIT: {
+        push_str(rt, peek(RAM + IP + 1));
+        IP += 1 + sizeof(addr_t);
+        break;
+    } default:
+        ok = 0;     // Error: cannot parse an operand.
+    }
+OUT return ok;
+}
 
 /// Used after an operand to deal with a possible string subscript.
-void expr_str_subscript(runtime_t rt)
-{
+static void expr_str_subscript(runtime_t rt)
+{IN
     if (CODE == '(' && peek(RAM + tos_str(rt)) != NIL) {
         // x$(i TO j) is the same as SUB$(x$, i, j)
         // x$(i TO) is the same as x$(i TO LEN x$)
@@ -1350,95 +1454,49 @@ void expr_str_subscript(runtime_t rt)
         EXPECT(')', ERROR_OPENPAR_WITHOUT_CLOSEPAR);
         runtime_epush(rt, OPER_SUBS,
             OPERATORS[CODE_SUBS - CODE_STARTOPERATOR - 1].priority);
-}}
+    }
+OUT }
 
 /** Evaluate an expression at rt->ip and leave on the stack the value: return
     the runtime, so that it can be used in expressions (e.g. pop_num(expr(rt))).
     */
 runtime_t expr(runtime_t rt)
 {IN
-    addr_t v, va;
-    int open_close_match = 0;   // match between opened and closed parentheses.
-    rt->dt = rt->dp;            // Reset temporary string area.
-    for (;;) {
-        expr_prefix_operators(rt);
-        /** Operand. */
-//~ printf("OPERAND: CODE = %i\n", CODE);
-        switch (CODE) {
-        case CODE_IDN: {
-            ON_ERROR((v = var_find(rt, IP + 1)) == NIL, ERROR_UNDEFINED_VARIABLE);
-            var_address(rt, v, &va);
-            push_num(rt, peek_num(RAM + va));
-            break;
-        } case CODE_IDNS: {
-            ON_ERROR((v = var_find(rt, IP + 1)) == NIL, ERROR_UNDEFINED_VARIABLE);
-            var_address(rt, v, &va);
-            // Make a temporary copy of string va.
-            int s = data_add_temp(rt, RAM + va, strlen(RAM + va));
-            ON_ERROR(s < 0, ERROR_OUT_OF_STRING_MEMORY);
-            push_str(rt, s);
-            break;
-        } case CODE_INTLIT:
-            push_num(rt, peek(RAM + IP + 1));
-            IP += 1 + sizeof(addr_t);
-            break;
-        case CODE_NUMLIT:
-            push_num(rt, peek_num(RAM + IP + 1));
-            IP += 1 + sizeof(num_t);
-            break;
-        case CODE_STRLIT:
-            push_str(rt, peek(RAM + IP + 1));
-            IP += 1 + sizeof(addr_t);
-            break;
-        case '(':
-            /*  Push a fake operator with priority 0: all operators below it
-                won't be executed until this one is not popped, and that
-                happens when ')' is parsed. */
-            ++ open_close_match;
-            ++ IP;
-            runtime_epush(rt, NULL, 0);
-            continue;
-        default:
-            ON_ERROR(1, ERROR_STACK_UNDERFLOW);
-        }
-        expr_str_subscript(rt);
-        // Check against closed parentheses.
-        while (CODE == ')') {
-            // Pop and execute anything on the stack with priority >= 1.
-            runtime_epop(rt, 0);
-            // A closed parenthesis may delimit the end of an expression.
-            if (rt->estack_next == 0) {
-OUT             return rt;
-            }
-            // Drop the (NULL, 0) item on top of the operator stack.
-            -- rt->estack_next;
-            -- open_close_match;
-            ++ IP;
-        }
+    /*  Push a fake 0-priority operator on the operators stack to avoid
+        to accidentally use operators already on the stack before executing
+        the current expression (since expressions can be nested). */
+    runtime_epush(rt, NULL, 0);
+
+Again:
+    // Check against a prefix operator (e.g. -1, sin 1, etc.)
+    expr_prefix_operators(rt);
+    // Parse the operand.
+    ON_ERROR(!expr_operand(rt), ERROR_STACK_UNDERFLOW);
+    // Possible subscript after string operator.
+    expr_str_subscript(rt);
 //~ printf("OPERATOR?: CODE = %i, paren = %i\n", CODE, open_close_match);
-        // Check against a binary operator
-        if (CODE > CODE_STARTOPERATOR && CODE < CODE_ENDOPERATOR
-        && OPERATORS[CODE - CODE_STARTOPERATOR - 1].binary) {
-            int code = CODE - CODE_STARTOPERATOR - 1;
-            runtime_epop(rt, OPERATORS[code].priority);
-            runtime_epush(rt, OPERATORS[code].routine, OPERATORS[code].priority);
-            ++ IP;
-            continue;   // evaluate the second operand.
-        }
-        // A list of comma separated expressions inside ( and ) is legal.
-        if (CODE == ',' && open_close_match > 0) {
-            // Pop and execute anything on the stack with priority >= 1.
-            runtime_epop(rt, 0);
-            ON_ERROR(rt->estack_next == 0, ERROR_COMMA_WITHOUT_OPENPAR);
-            // Continue to the next item of the comma separated list.
-            ++ IP;
-            continue;
-        }
-        // End of the expression: break
-        ON_ERROR(open_close_match != 0, ERROR_OPENPAR_WITHOUT_CLOSEPAR);
-        runtime_epop(rt, 0);
-        break;
+    // Check against a binary infix operator
+    int code = CODE - CODE_STARTOPERATOR - 1;
+    if (code >= 0 && CODE < CODE_ENDOPERATOR && OPERATORS[code].infix) {
+        runtime_eunroll(rt, OPERATORS[code].priority);
+        runtime_epush(rt, OPERATORS[code].routine, OPERATORS[code].priority);
+        ++ IP;
+        // evaluate the second operand.
+        goto Again;
     }
+    runtime_eunroll(rt, 0);
+    //~ printf("ESTACK: ");
+    //~ for (int k = 0; k < rt->estack_next; ++ k) {
+        //~ for (int i = 0; i < sizeof(OPERATORS)/sizeof(*OPERATORS); ++ i) {
+            //~ if (OPERATORS[i].routine == rt->estack[k].routine) {
+                //~ printf(" %s", OPERATORS[i].name);
+                //~ break;
+            //~ }
+        //~ }
+        //~ printf(" [%p]", rt->estack[k].routine);
+    //~ }
+    //~ printf("\n");
+    runtime_epop(rt);   // Drop the fake NULL operator.
 OUT return rt;
 }
 
@@ -1530,8 +1588,6 @@ addr_t assign_item(runtime_t rt, addr_t b)
 
 // ////////////////////// INSTRUCTION IMPLEMENTATIONS ////////////////////// //
 
-//  Auxiliary functions.
-
 /** Parse a possible channel and return the corresponding file and buffer into
     *file and *buffer. */
 static inline void instr_channel(runtime_t rt, FILE **file, addr_t *buffer)
@@ -1582,6 +1638,46 @@ addr_t instr_lookfor(runtime_t rt, addr_t ip, byte_t code)
     return NIL;
 OUT}
 
+void INSTR_ATTR(runtime_t rt)
+{IN // ATTR property = value, ...
+    // where property can be: BOLD, UNDER, BACK, FORE, BRIGHT, BLINK, REVERSE
+    // values can be BOLD, UNDER, BRIGHT, BLINK = 0|1; BACK, FORE = 0,...,7
+    for (;;) {
+        EXPECT(CODE_IDN, ERROR_ILLEGAL_ATTRIBUTE);
+        char *property = RAM + peek(RAM + IP);
+        IP += sizeof(str_t);
+        unsigned value = 1;
+        if (CODE == CODE_EQ) {
+            ++ IP;
+            value = pop_num(expr(rt));
+        }
+        // What follows depends on the compliancy of the terminal with ECMA-48.
+        if (strcmp(property, "BACK") == 0)
+            printf("\033[48;2;%i;%i;%im", 255*(value&4), 255*(value&2),
+                255*(value&1));
+        else if (strcmp(property, "BLINK") == 0)
+            printf("\033[%im", 25 - 20*(value & 1));
+        else if (strcmp(property, "BOLD") == 0)
+            printf("\033[%im", 22 - 21*(value & 1));
+        else if (strcmp(property, "BRIGHT") == 0)
+            printf("\033[%im", 2 + 20*(value & 1));
+        else if (strcmp(property, "FORE") == 0)
+            printf("\033[38;2;%i;%i;%im", 255*(value&4), 255*(value&2),
+                255*(value&1));
+        else if (strcmp(property, "RESET") == 0)
+            fputs("\033[0m\033[38;2;0;255;0m\033[48;2;0;0;0m", stdout);
+        else if (strcmp(property, "REVERSE") == 0)
+            printf("\033[%im", 27 - 20*(value & 1));
+        else if (strcmp(property, "UNDER") == 0)
+            printf("\033[%im", 24 - 20*(value & 1));
+        else {
+            ON_ERROR(1, ERROR_ILLEGAL_ATTRIBUTE);
+        }
+        if (CODE != ',') break;
+        ++ IP;
+    }
+OUT}
+
 void INSTR_BYE(runtime_t rt)
 {IN
     if (prog_check(rt)) {
@@ -1601,10 +1697,13 @@ void INSTR_CLOSE(runtime_t rt)
     rt->channels[ch] = NULL;
 OUT}
 
+void INSTR_CLS(runtime_t rt) {IN fputs("\033[2J\033[1;1f", stdout); OUT}
+
 void INSTR_DIM(runtime_t rt)
 {IN
     for (;;) {
         ON_ERROR(CODE != CODE_IDN && CODE != CODE_IDNS, ERROR_IDENTIFIER_EXPECTED);
+        ON_ERROR(var_find(rt, IP + 1) != NIL, ERROR_VARIABLE_ALREADY_DEFINED);
         addr_t d1, d2;
         str_t name;
         int type = var_array_parse(rt, &name, &d1, &d2);
@@ -1614,13 +1713,13 @@ void INSTR_DIM(runtime_t rt)
     }
 OUT}
 
+void INSTR_END(runtime_t rt) {IN ON_ERROR(0, ERROR_PROGRAM_STOPPED); OUT}
 void INSTR_ERROR(runtime_t rt) {IN ON_ERROR(1, pop_num(expr(rt))); OUT}
 
 void INSTR_FOR(runtime_t rt)
 {IN
     // FOR creates its variable if not already defined by another FOR statement.
     EXPECT(CODE_IDN, ERROR_NUMVAR);
-    addr_t va;
     addr_t v = var_find(rt, IP);
     if (v != NIL) {
         ON_ERROR(VAR_TYPE(v) != VAR_FOR, ERROR_FORVAR);
@@ -1631,13 +1730,15 @@ void INSTR_FOR(runtime_t rt)
     }
     IP += sizeof(addr_t);   // skip the variable's name.
 //~ printf("IP:");for(int i = 0; i < 10; ++i) printf(" %i", RAM[IP+i]);putchar('\n');
-    va = VAR_ADDR(v);
+    addr_t va = VAR_ADDR(v);
     assign_expr(rt, VAR_FOR, v, va);
     EXPECT(CODE_TO, ERROR_TO_EXPECTED);
     poke_num(RAM + va + sizeof(num_t), pop_num(expr(rt)));
     if (CODE == CODE_STEP) {
         ++ IP;
         poke_num(RAM + va + 2*sizeof(num_t), pop_num(expr(rt)));
+    } else {
+        poke_num(RAM + va + 2*sizeof(num_t), 1);
     }
     // FOR instruction completely parsed: we expect ':', '\'' or '\0'.
     if (CODE == ':') {
@@ -1656,13 +1757,17 @@ void INSTR_FOR(runtime_t rt)
         /*  The condition is initially false, just skip the loop, thus looks for
             the next "NEXT var" instruction and skip after it. If the FOR-NEXT
             pair is not matched respecting nestings cross your fingers. */
+        IP = instr_skip(rt, IP);    // skip to the next line.
         do {
+//~ printf("IP = %i, CODE = %i\n", IP, CODE);
             IP = instr_lookfor(rt, IP, CODE_NEXT);
             ON_ERROR(IP == NIL, ERROR_FOR_WITHOUT_NEXT);
             EXPECT(CODE_IDN, ERROR_NUMVAR);
-        } while (VAR_NAME(va) != peek(RAM + IP));
+//~ printf("var = %s, value = %g, this = %s\n", RAM + peek(RAM + VAR_NAME(v)), peek_num(RAM + va), RAM +  peek(RAM + IP));
+        } while (peek(RAM + VAR_NAME(v)) != peek(RAM + IP));
         // Ok, we found the matching NEXT: skip after it.
-        IP = instr_skip(rt, IP);
+        // (here IP points to the address of the variable name, skip it!
+        IP = instr_skip(rt, IP + sizeof(addr_t));
     }
 OUT}
 
@@ -1710,15 +1815,16 @@ OUT}
 void INSTR_LET(runtime_t rt)
 {IN
     // LET v[=e], ..., v[=e]
+    int type;
+    addr_t v, va;
     for (;;) {
-        addr_t va;
-        addr_t v = var_find(rt, IP + 1);
-//~ printf("%u %s\n", v, RAM + peek(RAM + IP + 1));
-        ON_ERROR(v != NIL, ERROR_VARIABLE_ALREADY_DEFINED);
-        v = rt->vp;     // The variable will be inserted here.
-        int type = (CODE == CODE_IDN) ? VAR_NUM : VAR_STR;
-        var_insert(rt, peek(RAM + IP + 1), type, 0, 0, 0, 0, 0);
-        var_address(rt, v, &va);
+        ON_ERROR(CODE != CODE_IDN && CODE != CODE_IDNS, ERROR_IDENTIFIER_EXPECTED);
+        if ((v = var_find(rt, IP + 1)) == NIL) {
+            v = rt->vp;     // The variable will be inserted here.
+            type = (CODE == CODE_IDN) ? VAR_NUM : VAR_STR;
+            var_insert(rt, peek(RAM + IP + 1), type, 0, 0, 0, 0, 0);
+        }
+        type = var_address(rt, v, &va);
         if (CODE == CODE_EQ) assign_expr(rt, type, v, va);
         if (CODE != ',') break;
         ++ IP;
@@ -1769,10 +1875,12 @@ void INSTR_NEXT(runtime_t rt)
     EXPECT(CODE_IDN, ERROR_NUMVAR);
 //~ printf("LOOKFOR %s\n", RAM + peek(RAM + IP));
     addr_t v = var_find(rt, IP);
+//~ printf("> NEXT %s [%g TO %g STEP %g]\n", RAM + peek(RAM + VAR_NAME(v)), peek_num(RAM + VAR_ADDR(v)), peek_num(RAM + VAR_ADDR(v) + sizeof(num_t)), peek_num(RAM + VAR_ADDR(v) + 2*sizeof(num_t)));
     ON_ERROR(v == NIL, ERROR_UNDEFINED_VARIABLE);
     IP += sizeof(str_t);
     ON_ERROR(VAR_TYPE(v) != VAR_FOR, ERROR_FORVAR);
     var_for_next(rt, v);
+//~ printf("< NEXT %s [%g TO %g STEP %g]\n", RAM + peek(RAM + VAR_NAME(v)), peek_num(RAM + VAR_ADDR(v)), peek_num(RAM + VAR_ADDR(v) + sizeof(num_t)), peek_num(RAM + VAR_ADDR(v) + 2*sizeof(num_t)));
 OUT}
 
 void INSTR_ONERROR(runtime_t rt)
@@ -1810,14 +1918,13 @@ void INSTR_PRINT(runtime_t rt)
             if (CODE == ',') fputc('\t', f);
             ++ IP;
             newline = 0;
-            continue;
-        }
-        num_t n;
-        str_t s;
-        pop(expr(rt), &n, &s);
-        if (s == NIL) fprintf(f, "%g", n); else fputs(RAM + s, f);
-        newline = 1;
-    }
+        } else {
+            num_t n;
+            str_t s;
+            pop(expr(rt), &n, &s);
+            if (s == NIL) fprintf(f, "%g", n); else fputs(RAM + s, f);
+            newline = 1;
+    }}
     if (newline) fputc('\n', f);
 OUT}
 
@@ -1879,7 +1986,7 @@ void INSTR_RUN(runtime_t rt)
     for (rt->ip0 = rt->pp0; rt->ip0 < rt->pp; rt->ip0 = rt->ipn) {
         instr_line(rt);
         if (rt->trace) {
-            printf("EXECUTE LINE % 4i", peek(RAM + rt->ip0 + 2));
+            printf("EXECUTE % 4i ", peek(RAM + rt->ip0 + 2));
             for (addr_t p = rt->ip0 + 4; RAM[p] != 0; p = token_dump(rt, p, stdout))
                 ;
             putchar('\n');
@@ -1888,7 +1995,9 @@ void INSTR_RUN(runtime_t rt)
         if (instr_exec(rt)) {
             printf("LINE %i: ", peek(RAM + rt->ip0 + 2));
             break;
-    }}
+        }
+        fflush(stdout);
+    }
     rt->ip0 = ip0_saved;
     rt->ip = ip_saved;
     rt->ipn = ipn_saved;
@@ -1921,14 +2030,13 @@ void INSTR_TRACE(runtime_t rt) {IN rt->trace = pop_num(expr(rt)); OUT}
 void (*INSTRUCTION_CODE[])(runtime_t) = {
     /*  Same ordering as the constant between CODE_STARTKEYWORD and
         CODE_ENDKEYWORD */
-    INSTR_BYE, INSTR_CLOSE, INSTR_SKIP /* DATA */, INSTR_SKIP /* DEF */,
-    INSTR_DIM, INSTR_ERROR,
-    INSTR_FOR, INSTR_GOSUB, INSTR_GOTO, INSTR_IF, INSTR_INPUT, INSTR_LET,
-    INSTR_LINPUT, INSTR_LIST, INSTR_LOAD, INSTR_MERGE, INSTR_NEW, INSTR_NEXT,
-    INSTR_ONERROR, INSTR_OPEN, INSTR_PRINT, INSTR_READ, INSTR_SKIP /* REM */,
-    INSTR_REPEAT, INSTR_RESTORE, INSTR_RETURN, INSTR_RUN, INSTR_SAVE,
-    INSTR_SKIP, INSTR_STEP, INSTR_STOP, INSTR_SYS, INSTR_THEN, INSTR_TO,
-    INSTR_TRACE
+    INSTR_ATTR, INSTR_BYE, INSTR_CLOSE, INSTR_CLS, INSTR_SKIP /* DATA */,
+    INSTR_SKIP /* DEF */, INSTR_DIM, INSTR_END, INSTR_ERROR, INSTR_FOR,
+    INSTR_GOSUB, INSTR_GOTO, INSTR_IF, INSTR_INPUT, INSTR_LET, INSTR_LINPUT,
+    INSTR_LIST, INSTR_LOAD, INSTR_MERGE, INSTR_NEW, INSTR_NEXT, INSTR_ONERROR,
+    INSTR_OPEN, INSTR_PRINT, INSTR_READ, INSTR_SKIP /* REM */, INSTR_REPEAT,
+    INSTR_RESTORE, INSTR_RETURN, INSTR_RUN, INSTR_SAVE, INSTR_SKIP, INSTR_STEP,
+    INSTR_STOP, INSTR_SYS, INSTR_THEN, INSTR_TO, INSTR_TRACE
 };
 
 /** Execute the line at IP0, starting from instruction IP. Return the value of
@@ -1939,22 +2047,23 @@ int instr_exec(runtime_t rt)
     jmp_buf error_saved;
     memcpy(error_saved, rt->err_buffer, sizeof(error_saved));
 Again:
-    rt->error = 0;
+    rt->error = 0;          // Reset error condition.
+    rt->estack_next = 0;    // Reset operator stack.
+    rt->sp = rt->sp0;       // Reset operand stack.
+    rt->dt = rt->dp;        // Reset temporary string area.
     if (setjmp(rt->err_buffer) == 0) {
         volatile byte_t opcode;
         while ((opcode = CODE) != 0 && opcode != '\'') {
-            // Skip instruction separators.
-            while (CODE == ':') ++ IP;
-            if ((opcode = CODE) > CODE_STARTKEYWORD && opcode < CODE_ENDKEYWORD) {
+            // Skip possible instruction separators.
+            while ((opcode = CODE) == ':') ++ IP;
+            if (opcode > CODE_STARTKEYWORD && opcode < CODE_ENDKEYWORD) {
+                // Start with keyword: execute the corresponding INSTR_ routine.
                 ++ IP; (*INSTRUCTION_CODE[opcode - CODE_STARTKEYWORD - 1])(rt);
-            } else if (opcode == CODE_IDN || opcode == CODE_IDNS) {
-                addr_t v = var_find(rt, IP + 1);
-                ON_ERROR(v == NIL, ERROR_UNDEFINED_VARIABLE);
-                addr_t va;
-                int type = var_address(rt, v, &va);
-                assign_expr(rt, type, v, va);
             } else {
-                ON_ERROR(1, ERROR_ILLEGAL_INSTRUCTION);
+                // Expect an instruction of the form "var = expr" or an error.
+                ON_ERROR(opcode != CODE_IDN && opcode != CODE_IDNS,
+                    ERROR_ILLEGAL_INSTRUCTION);
+                INSTR_LET(rt);
     }}} else {
         // If some ONERROR instruction has been issued, execute it.
         if (rt->error_routine != 0) {
