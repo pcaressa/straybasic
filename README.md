@@ -1,4 +1,4 @@
-# Straybasic
+![StrayBasic](straybasic.jpeg "Title")
 
 ## A street Basic imaginary dialect
 
@@ -29,7 +29,7 @@ in the old days by an
 All data (program, symbol table and data) are stored inside a 64K virtual
 ram, which is subdivided as follows:
 
-    - Data area, from dp0 to pp0-1.
+    - Constant string area, from dp0 to pp0-1.
     - Program area, from pp0 to vp0-1.
     - Variable area, from vp0 to vp-1.
     - Free space from vp to sp-1.
@@ -40,7 +40,7 @@ ram, which is subdivided as follows:
     - Buffer for file #1, from buf1 to buf2-1.
     - Buffer for file #2, from buf2 to buf3-1.
     - Buffer for file #3, from buf3 to buf4-1.
-    - Buffer for file #4, from buf4 to 65536.
+    - Buffer for file #4, from buf4 to 65535.
 
 Inside some areas there are pointers pointing to the first free item in the
 area:
