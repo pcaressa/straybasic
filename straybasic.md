@@ -364,7 +364,6 @@ Numbers are stored in a fixed precision floating point representation, with 4 by
     1
     >
 
-
 Of course, an algebraic expression usually has variables as operands rather than numbers: however, Basic always tries to evaluate the expression, so that values should be assigned to variables. For example
 
     >print sqr(x^2 + y^2) 
@@ -380,7 +379,7 @@ Actually, as in most street Basics, the `LET` keyword can be omitted, even if cl
 
 In any case, we can evaluate an expression containing variables only if all those variables have assigned values. A variable's name should start with a letter, followed by letters or digits: valid names are `a`, `a1`, `a11`, `a1a1`, `a1a` etc. Variable's names are case insensitive and always converted to uppercase. Moreover, *variable names cannot be equal to any language keyword*: the list of keywords, denoting instructions or functions, is the following one:
 
-    ABS ACS AND ASC ASN AT ATN ATTR BYE CHAIN CHR$ CLEAR CLOSE CLS CONTINUE COS DATA DEF DIM DUMP END ERROR EXP FOR GO GOSUB GOTO IF INKEY$ INPUT INT LEFT$ LEN LET LINPUT LIST LOAD LOG MERGE MID$ NEW NEXT NOT ON OPEN OR PRINT RANDOMIZE READ REM REPEAT RESTORE RETURN RIGHT$ RND RUN SAVE SGN SIN SKIP SQR STEP STOP STR$ SUB$ SYS TAB TAN THEN TO TRACE VAL
+    ABS ACS AND ASC ASN AT ATN ATTR BYE CHAIN CHR$ CLEAR CLOSE CLS COS DATA DEF DIM DUMP END ERROR EXP FOR GO GOSUB GOTO IF INKEY$ INPUT INT LEFT$ LEN LET LINPUT LIST LOAD LOG MERGE MID$ NEW NEXT NOT ON OPEN OR PRINT RANDOMIZE READ REM REPEAT RESTORE RETURN RIGHT$ RND RUN SAVE SGN SIN SKIP SQR STEP STOP STR$ SUB$ SYS TAB TAN THEN TO TRACE VAL
 
 One can overwrite the current value of a variable reassigning it:
 
@@ -583,7 +582,7 @@ The check at line 20 is needed to prevent an error; for example, if we delete li
 
 The wildest street Basic just passed execution on in these cases, I preferred a more rigorous approach.
 
-Some Basics, as the ZX Spectrum one, didn't provide the `ON` instruction but allowed for *any* expression as argument of a `GOTO`, so that one could use *computed goto*, a mainteinance nightmare. StrayBasic provides them, so we can write
+Some Basics, as the ZX Spectrum one, didn't provide the `ON` instruction but allowed for *any* expression as argument of a `GOTO`, so that one could use *computed goto*, a mainteinance nightmare. StrayBasic provides computed `GOTO`s, so we can write
 
     >10 LET X = 3
     >20 IF X < 0 OR X > 3 THEN 150
@@ -601,7 +600,18 @@ Some Basics, as the ZX Spectrum one, didn't provide the `ON` instruction but all
 Two final remarks on the `GOTO` instruction as implemented by the StrayBasic interpreter:
 
 - The line figuring after the `GOTO` (or the result of the expression after it) should be a line existing in the program: if we write `GOTO 110` then line 110 has to exist, else an error occurs (some street Basics pointed to the first line with number greater or equal to the line number after `GOTO`).
-- One can use the form `GO TO` instead of `GOTO`.
+- The form `GO TO` instead of `GOTO` is forbidden! This is because StrayBasic do not allows for spaces inside identifiers (classical Basic did so, since identifiers in it were a letter or a letter followed by a digit: StrayBasic lets the programmer to use longer alphanumerical sequences).
+
+As it is said time and again in the 60s and 70s books on programming, misuse of `GOTO`s can lead to *spaghetti code*: for example, let us consider the task to check whether a number is divisible by 2, 3, 5, or 7 and, in this case, to divide it and do the same on the quotient, until no check gives a positive result. A simple minded approach would be
+
+
+10 INPUT N
+20 LET X = N / 3
+30 IF X = N THEN N = X: GOTO 20
+35 LET X = N / 5
+40 IF X = N THEN N = X: GOTO 20
+45 LET X = N / 7
+50 IF X = N THEN N = X: GOTO 20
 
 ### For loops
 
@@ -698,18 +708,16 @@ We can set up a simple version of this algorithm by applying two properties of g
 
 The idea is to apply 2 to subtract n from m if n >m (or m from n if m >n), until n = m, in which case we got the gcd as n = m.
 
-```
-  10 REM Compute GCD
-  15 REM Input N, M and check them to be positive integers.
-  20 INPUT "N =", N
-  25 IF N <> INT(N) OR N < 1 THEN PRINT "Please insert a positive integer": GOTO 20
-  30 INPUT "M =", M
-  35 IF M <> INT(M) OR M < 1 THEN PRINT "Please insert a positive integer": GOTO 30
-  40 PRINT "GCD("; N; ","; M; ") = ";
-  50 IF N < M THEN LET M = M - N: GOTO 50
-  55 IF N > M THEN LET N = N - M: GOTO 50
-  60 PRINT N
-```
+      10 REM Compute GCD
+      15 REM Input N, M and check them to be positive integers.
+      20 INPUT "N =", N
+      25 IF N <> INT(N) OR N < 1 THEN PRINT "Please insert a positive integer": GOTO 20
+      30 INPUT "M =", M
+      35 IF M <> INT(M) OR M < 1 THEN PRINT "Please insert a positive integer": GOTO 30
+      40 PRINT "GCD("; N; ","; M; ") = ";
+      50 IF N < M THEN LET M = M - N: GOTO 50
+      55 IF N > M THEN LET N = N - M: GOTO 50
+      60 PRINT N
 
 Notice that on lines 25 and 35, we used a more complex form of the `IF` statements, that allows after the `THEN` not only a line number where to jump, but also a sequence of statement to execute if the `IF` condition is true, separated by colons. Indeed we want a message to be printed and then perform an unconditional jump to repeat the number input.
 
@@ -862,24 +870,26 @@ Once declared, elements of a vector or of a matrix can be assigned, for example:
 
 In general, to assign a value to each element a `FOR` loop is used: for example, let us rewrite our Fibonacci program:
 
-    10 DIM F(29)
-    20 LET F(1) = 1
-    30 LET F(2) = 1
-    40 FOR I = 3 TO 29
-    50 LET F(I) = F(I-2) + F(I-1)
-    60 NEXT I
-    70 PRINT F(29)
+    10 REM Compute GCD
+    20 DIM F(29)
+    30 LET F(1) = 1
+    40 LET F(2) = 1
+    50 FOR I = 3 TO 29
+    60 LET F(I) = F(I-2) + F(I-1)
+    70 NEXT I
+    80 PRINT F(29)
 
 We can generalize this program to let it compute any Fibonacci number:
 
-     5 INPUT "N="; N
-    10 DIM F(N)
-    20 LET F(1) = 1
-    30 LET F(2) = 1
-    40 FOR I = 3 TO N
-    50 LET F(I) = F(I - 2) + F(I - 1)
-    60 NEXT I
-    70 PRINT F(N)
+    10 REM Compute GCD
+    15 INPUT "N="; N
+    20 DIM F(N)
+    30 LET F(1) = 1
+    40 LET F(2) = 1
+    50 FOR I = 3 TO N
+    60 LET F(I) = F(I-2) + F(I-1)
+    70 NEXT I
+    80 PRINT F(N)
 
 Indeed, a `DIM` statement accepts any expression as vector or matrix size (this was common for street Basic but not for classical Basic, being the latter compiled and not interpreted).
 
@@ -895,43 +905,41 @@ To check available memory use the `DUMP` statement, that prints information on t
 
     >dump
     KEYWORDS:
-     ATTR BYE CHAIN CLEAR CLOSE CLS CONTINUE DATA DEF DIM DUMP END ERROR FOR GO GOSUB GOTO IF INPUT LET LINPUT LIST LOAD MERGE NEW NEXT ON OPEN PRINT RANDOMIZE READ REM REPEAT RESTORE RETURN RUN SAVE SKIP STEP STOP SYS THEN TO TRACE
+        ATTR BYE CHAIN CLEAR CLOSE CLS DATA DEF DIM DUMP END ERROR FOR GOSUB GOTO IF INPUT LET LINPUT LIST LOAD MERGE NEW NEXT ON OPEN PRINT RANDOMIZE READ REM REPEAT RESTORE RETURN RUN SAVE SKIP STEP STOP SYS THEN TO TRACE
     OPERATORS:
-     * + - - / < <= <> = > >= ABS ACS AND ASC ASN AT ATN CHR$ COS DIV EXP INKEY$ INT LEFT$ LEN LOG MID$ MOD NOT OR RIGHT$ RND SGN SIN SQR STR$ SUB$ TAB TAN VAL ^
-    MEMORY OCCUPATION:
-     STRINGS   =     0 /  4096 ( 0%)
-     PROGRAM   =     0 /  8192 ( 0%)
-     VARIABLES =     0 / 51532 ( 0%)
+        # & * + - - / < <= <> = > >= ABS ACS AND ASC ASN AT ATN CHR$ COS DIV EOF EXP INKEY$ INT LEFT$ LEN LOG MID$ MOD NOT OR RIGHT$ RND SGN SIN SQR STR$ SUB$ TAB TAN VAL ^
+    MEMORY:
+       STRINGS = 0/4096 ( 0%); PROGRAM = 0/8192 ( 0%); VARIABLES = 0/51532 ( 0%)
     MEMORY MAP:
-     | strings | program | variables | free space | stacks | buffers |
-     0000      1000      3000        3000         F94C     FA00      FFFF
-    STRING CONSTANTS
-
+        | strings | program | variables | free space | stacks | buffers |
+      0000      1000      3000        3000         F94C     FA00      FFFF
+    STRINGS:
     VARIABLES:
+    CHANNELS:
+        #0 FREE. #1 FREE. #2 FREE. #3 FREE. #4 FREE.
     >
 
-The `DUMP` instruction lists all statement keywords and all operators available in the Basic interpreter. Next, it prints how much memory is occupied / reserved for strings and identifiers, program and variables. Lastly, the list of all variables is printed.
+The `DUMP` instruction lists all statement keywords and all operators available in the Basic interpreter. Next, it prints how much memory is occupied / reserved for strings and identifiers, program and variables. Finally, the lists of string constants, variables and channels are printed.
 
 Let us define a matrix and see what happens:
 
     >dim a(100,100)
     >dump
     KEYWORDS:
-     ATTR BYE CHAIN CLEAR CLOSE CLS CONTINUE DATA DEF DIM DUMP END ERROR FOR GO GOSUB GOTO IF INPUT LET LINPUT LIST LOAD MERGE NEW NEXT ON OPEN PRINT RANDOMIZE READ REM REPEAT RESTORE RETURN RUN SAVE SKIP STEP STOP SYS THEN TO TRACE
+        ATTR BYE CHAIN CLEAR CLOSE CLS DATA DEF DIM DUMP END ERROR FOR GOSUB GOTO IF INPUT LET LINPUT LIST LOAD MERGE NEW NEXT ON OPEN PRINT RANDOMIZE READ REM REPEAT RESTORE RETURN RUN SAVE SKIP STEP STOP SYS THEN TO TRACE
     OPERATORS:
-     * + - - / < <= <> = > >= ABS ACS AND ASC ASN AT ATN CHR$ COS DIV EXP INKEY$ INT LEFT$ LEN LOG MID$ MOD NOT OR RIGHT$ RND SGN SIN SQR STR$ SUB$ TAB TAN VAL ^
-    MEMORY OCCUPATION:
-     STRINGS   =     2 /  4096 ( 0%)
-     PROGRAM   =     0 /  8192 ( 0%)
-     VARIABLES = 40009 / 51532 (77%)
+        # & * + - - / < <= <> = > >= ABS ACS AND ASC ASN AT ATN CHR$ COS DIV EOF EXP INKEY$ INT LEFT$ LEN LOG MID$ MOD NOT OR RIGHT$ RND SGN SIN SQR STR$ SUB$ TAB TAN VAL ^
+    MEMORY:
+       STRINGS = 2/4096 ( 0%); PROGRAM = 0/8192 ( 0%); VARIABLES = 40009/51532 (77%)
     MEMORY MAP:
-     | strings | program | variables | free space | stacks | buffers |
-     0000      1000      3000        CC49         F94C     FA00      FFFF
-    STRING CONSTANTS
+        | strings | program | variables | free space | stacks | buffers |
+      0000      1000      3000        CC49         F94C     FA00      FFFF
+    STRINGS:
      "A"
     VARIABLES:
-     A(100,100)
-    >
+     A(100,100) = | 0 0 0 ...  0 ; 0 0 0 ...  0 ; 0 0 0 ...  0 ; ...  ; 0 0 0 ...  0 ;|
+    CHANNELS:
+        #0 FREE. #1 FREE. #2 FREE. #3 FREE. #4 FREE.    >
 
 Our 100x100 matrix occupies the 77% of available space for variables.
 
@@ -944,19 +952,19 @@ to assign s bytes for strings, p bytes for the program (the space for variables 
     >CLEAR 1024, 16384
     >DUMP
     KEYWORDS:
-     ATTR BYE CHAIN CLEAR CLOSE CLS CONTINUE DATA DEF DIM DUMP END ERROR FOR GO GOSUB GOTO IF INPUT LET LINPUT LIST LOAD MERGE NEW NEXT ON OPEN PRINT RANDOMIZE READ REM REPEAT RESTORE RETURN RUN SAVE SKIP STEP STOP SYS THEN TO TRACE
+        ATTR BYE CHAIN CLEAR CLOSE CLS DATA DEF DIM DUMP END ERROR FOR GOSUB GOTO IF INPUT LET LINPUT LIST LOAD MERGE NEW NEXT ON OPEN PRINT RANDOMIZE READ REM REPEAT RESTORE RETURN RUN SAVE SKIP STEP STOP SYS THEN TO TRACE
     OPERATORS:
-     * + - - / < <= <> = > >= ABS ACS AND ASC ASN AT ATN CHR$ COS DIV EXP INKEY$ INT LEFT$ LEN LOG MID$ MOD NOT OR RIGHT$ RND SGN SIN SQR STR$ SUB$ TAB TAN VAL ^
-    MEMORY OCCUPATION:
-     STRINGS   =     0 /  1024 ( 0%)
-     PROGRAM   =     0 / 16384 ( 0%)
-     VARIABLES =     0 / 46412 ( 0%)
+        # & * + - - / < <= <> = > >= ABS ACS AND ASC ASN AT ATN CHR$ COS DIV EOF EXP INKEY$ INT LEFT$ LEN LOG MID$ MOD NOT OR RIGHT$ RND SGN SIN SQR STR$ SUB$ TAB TAN VAL ^
+    MEMORY:
+       STRINGS = 2/1024 ( 0%); PROGRAM = 0/16384 ( 0%); VARIABLES = 0/46412 ( 0%)
     MEMORY MAP:
-     | strings | program | variables | free space | stacks | buffers |
-     0000      0400      4400        4400         F94C     FA00      FFFF
-    STRING CONSTANTS
-
+        | strings | program | variables | free space | stacks | buffers |
+      0000      0400      4400        4400         F94C     FA00      FFFF
+    STRINGS:
+     "A"
     VARIABLES:
+    CHANNELS:
+        #0 FREE. #1 FREE. #2 FREE. #3 FREE. #4 FREE.
     >
 
 Keep in mind that, when resizing either the constant string area or the program area, all data is lost, so that you cannot do that inside a program.
@@ -1073,7 +1081,7 @@ One can combine strings, both constants and variables, by the *concatenation* op
     >print s$ & " " & v$ & " " & o$
     Basic is a programming language
 
-(Notice that concatenation is associative, so there's no need of parentheses when using it time and again.)
+Notice that concatenation is associative, so there's no need of parentheses when using it time and again. Moreover, `&` is slightly more fast than `+`.
 
 After a string one can add a *subscript* to select part of it, as in the Sinclair Basic and ECMA Basic: such a subscript is a given by a pair of indexes pointing to the string characters, separated by the `TO` keyword (neither comma nor colon). For example
 
@@ -1114,7 +1122,7 @@ Notice however that
     4
     >
 
-does work thus `x$(i)` is the string which has just one character, the `i`-th character of `x$`. One can also assign such a character, for example
+does work, thus `x$(i)` is the string which has just one character, the `i`-th character of `x$`. One can also assign such a character, for example
 
     >let x$ = "123456789"
     >let x$(1) = "0"
@@ -1126,14 +1134,14 @@ However one cannot assign a part of a string longer than one character, as in th
 
 Other functions dealing with strings are:
 
-- `ASC(x$)` that returns the ASCII code of the first character of string `x$`.
-- `CHR$(x)` the string with one character corresponding to ASCII code `x`.
-- `LEFT$(x$,i)` the string extracted from `x$` taking its first `i` characters.
-- `MID$(x$,i,j)` the string extracted from `x$` taking `j` characters starting from the `i`-th.
-- `RIGHT$(x$,i)` the string extracted from `x$` taking its last `i` characters.
+- `ASC(x$)` that returns the ASCII code of the first character of string `x$` (0 if the string is empty).
+- `CHR$(x)` the string with one character corresponding to ASCII code `x` (an empty string if `x` is not in the range 0-127).
+- `LEFT$(x$,i)` the string extracted from `x$` taking its first `i` characters (an error occurs if `i` is greater than the length of the string).
+- `MID$(x$,i,j)` the string extracted from `x$` taking `j` characters starting from the `i`-th  (an error occurs if `i` or `i+j` are greater than the length of the string).
+- `RIGHT$(x$,i)` the string extracted from `x$` taking its last `i` characters (an error occurs if `i` is greater than the length of the string).
 - `SUB$(x$,i,j)` the string extracted from `x$` taking its characters from the `i`-th to the `j`-th included.
 - `STR$(x)` the string representing the number `x`.
-- `VAL(x$)` the number represented by string `x$`.
+- `VAL(x$)` the number represented by string `x$` (an error occurs if `x$` cannot be converted to a number).
 
 For example:
 
@@ -1156,7 +1164,7 @@ For example:
     0.12345
     >
 
-The `LEFT$/MID$/RIGHT$` functions are provided mostly for compatibility: anything can be easily done by `SUB$(x$,i,j)` and its subscript version `x$(i TO j)`.
+The `LEFT$/MID$/RIGHT$` functions are provided mostly for compatibility: anything equivalent could be done by `SUB$(x$,i,j)` and its subscript version `x$(i TO j)`.
 
 Let us make some simple examples of programs.
 
@@ -1256,7 +1264,23 @@ This program looks for a substring in a text: we want the search to ignore the c
 
 Notice the last line: it is a DATA instruction with one string constant, "#" which is written without quotes since it contains no commas (we could do the same for several lines of the speech).
 
-Notice also that we use the sequence of `DATA` statements as a string list; this is possible since we don't need to change its elements, otherwise we'd should use a string array.
+Notice also that we use the sequence of `DATA` statements as a string list; this is possible since we don't need to change its elements, otherwise we'd should use a string array. Let us give a try to the program:
+
+    >run
+    Match?conscience
+    Match at 5 in Thus conscience doth make cowards of us all,
+    Match?to be
+    Match at 0 in To be, or not to be, that is the question:
+    Match at 14 in To be, or not to be, that is the question:
+    Match at 9 in Devoutly to be wish'd. To die, to sleep;
+    Match?death 
+    Match at 21 in For in that sleep of death what dreams may come,
+    Match at 38 in But that the dread of something after death,
+    Match?love
+    Match at 23 in The pangs of dispriz'd love, the law's delay,
+    Match?
+    LINE 40: PROGRAM STOPPED
+    >
 
 ### String Arrays
 
@@ -1357,9 +1381,9 @@ For example, consider a subroutine to multiply a matrix times a vector, leaving 
     1060 NEXT I
     1070 RETURN
 
-We can call this subroutine time and again in a same program, for example
+We can call this subroutine time and again in a same program; for example, the following one defines an orthogonal matrix A (thus A^TA=I) and compute A^5v on the vector v = (1,1,1,1).
 
-    10 LET N = 4
+    10 READ N
     20 DIM A(N,N), X(N), Y(N)
     30 FOR I = 1 TO N: FOR J = 1 TO N: READ A(I,J): NEXT J: NEXT I
     40 FOR I = 1 TO N: READ X(I): NEXT I
@@ -1373,12 +1397,13 @@ We can call this subroutine time and again in a same program, for example
     90 NEXT I
     100 NEXT K
     300 STOP
-    500 DATA 0, 1, 1, 1
-    501 DATA 0, 0, 2, 2
-    502 DATA 0, 0, 0, 3
-    503 DATA 0, 0, 0, 0
-    510 DATA 4, 3, 2, 1
-    1000 REM SUBROUTINE matrix times a vector
+    500 DATA 4
+    510 DATA 0, 0, 0, 1
+    511 DATA 0, 0, -1, 0
+    512 DATA 1, 0, 0, 0
+    513 DATA 0, -1, 0, 0
+    520 DATA 1, 1, 1, 1
+    1000 REM SUBROUTINE product of a matrix times a vector
     1004 REM INPUT: Matrix A(N,N), vector X(N)
     1005 REM OUTPUT: Vector Y(N)
     1010 FOR I = 1 TO N
@@ -1393,17 +1418,547 @@ The main pitfall in Basic subroutines is due to the possible clash of variables 
 
 Since StrayBasic allows for identifiers longer than a single letter, one can use variables inside the subroutine with special names, for example `I1000` and `J1000` for index variables, to remind the fact that they belong to a subroutine starting at line 1000. More tricks can be devised.
 
+A typical program of the old days used a textual menu to provide a choice of possible actions to the user: for example, the following one, performs some operations on a text file, providing a rudimentary line editor.
 
+    10 REM Simple Line Editor
+    20 LET N = 1024: REM Maximum number of lines in a file
+    30 DIM T$(N): REM The list of all file lines
+    40 LET TOP = 1: REM First free line
+    100 CLS: REM This command clears the screen
+    120 PRINT "A simple line editor"
+    124 PRINT ,"0) Exit"
+    126 PRINT ,"1) List the current buffer"
+    128 PRINT ,"2) Append a line"
+    130 PRINT ,"3) Delete a line"
+    132 PRINT ,"4) Insert a line"
+    134 PRINT ,"5) Update a line"
+    140 INPUT "Choose a task"; C
+    150 IF C = 0 THEN STOP
+    160 ON INT C GOSUB 1000, 1100, 1200, 1300, 1400
+    170 GOTO 120
+    1000 REM SUBROUTINE: List the current buffer
+    1010 FOR I = 1 TO TOP - 1
+    1020 PRINT "["I"] " T$(I)
+    1030 NEXT I
+    1040 RETURN
+    1050 REM SUBROUTINE: Query the user for a line number and store it into L
+    1051 REM If the inserted line is invalid, OK is set to 0 else to 1
+    1055 LET OK = 0
+    1060 INPUT "Line Number? "; L
+    1065 LET L = INT L
+    1070 IF L < 1 OR L >= TOP THEN PRINT "Invalid line number!": RETURN
+    1080 LET OK = 1
+    1090 RETURN
+    1100 REM SUBROUTINE: Append a line to the current buffer
+    1110 IF TOP > N THEN PRINT "No more space for lines!": RETURN
+    1120 INPUT "?"; T$(TOP)
+    1130 LET TOP = TOP + 1
+    1190 RETURN
+    1200 REM SUBROUTINE: Delete a line from the current buffer
+    1210 GOSUB 1050: IF NOT OK THEN RETURN
+    1230 REM Shifts leftward all lines from the L-th
+    1240 LET TOP = TOP - 1
+    1250 FOR I = L TO TOP - 1
+    1260 LET T$(I) = T$(I + 1)
+    1270 NEXT I
+    1290 RETURN
+    1300 REM SUBROUTINE: Insert a line before another one
+    1305 IF TOP > N THEN PRINT "No more space for lines!": RETURN
+    1310 GOSUB 1050: IF NOT OK THEN RETURN
+    1330 REM Shift rightward
+    1340 FOR I = TOP TO L + 1 STEP -1
+    1350 LET T$(I) = T$(I - 1)
+    1360 NEXT I
+    1370 INPUT "Line to insert? "; T$(L)
+    1380 TOP = TOP + 1
+    1390 RETURN
+    1400 REM SUBROUTINE: Insert a line before another one
+    1405 IF TOP > N THEN PRINT "No more space for lines!": RETURN
+    1410 GOSUB 1050: IF NOT OK THEN RETURN
+    1430 INPUT "New line? "; T$(L)
+    1440 RETURN
+
+Notice that some subroutines call another subroutine, the one at line 1050 used to ask for a line and check it. There's a limit to the number of nested `GOSUB`s calls one can use in a program.
+
+At line 160 we used the `INT` function with no parentheses: indeed, when the argument of a unary function is a constant, variable or the result of another function call, we can omit parentheses. Notice also, that we could use a computed `GOSUB` instead of the `ON` statement on line 160:
+
+    160 GOSUB 900 + C * 100
+
+Finally, once we leave the program and it stops, the array `T$` contains the text we introduced, you can inspect it by `DUMP`:
+
+    >dump
+    KEYWORDS:
+        ATTR BYE CHAIN CLEAR CLOSE CLS DATA DEF DIM DUMP END ERROR FOR GOSUB GOTO IF INPUT LET LINPUT LIST LOAD MERGE NEW NEXT ON OPEN PRINT RANDOMIZE READ REM REPEAT RESTORE RETURN RUN SAVE SKIP STEP STOP SYS THEN TO TRACE
+    OPERATORS:
+        # & * + - - / < <= <> = > >= ABS ACS AND ASC ASN AT ATN CHR$ COS DIV EOF EXP INKEY$ INT LEFT$ LEN LOG MID$ MOD NOT OR RIGHT$ RND SGN SIN SQR STR$ SUB$ TAB TAN VAL ^
+    MEMORY:
+       STRINGS = 251/4096 ( 6%); PROGRAM = 1284/8192 (15%); VARIABLES = 1085/51532 ( 2%)
+    MEMORY MAP:
+        | strings | program | variables | free space | stacks | buffers |
+      0000      1000      3000        343D         F94C     FA00      FFFF
+    STRINGS:
+     "N" "T$" "TOP" "A simple line editor" "0) Exit" "1) List the current buffer" "2) Append a line" "3) Delete a line" "4) Insert a line" "5) Update a line" "Choose a task" "C" "I" "[" "] " "OK" "Line Number? " "L" "Invalid line number!" "No more space for lines!" "?" "Line to insert? " "New line? "
+    VARIABLES:
+     N = 1024
+     T$(1024) = | "line 1" "" "" ...  ""|
+     TOP = 2
+     C = 0
+     I = 2 TO 1 STEP 1
+    CHANNELS:
+        #0 BUSY. #1 FREE. #2 FREE. #3 FREE. #4 FREE.
+    >
+
+*En passant*, notice that loop variables are stored along with their start, end and step values. However, when speaking about files, we'll se below how to save the file we edited on the hard disk.
+
+### Chaining programs
+
+An unusual statement provided by StrayBasic is the `CHAIN` one: that was introduced in classic Basic to get rid of lack of space for long programs: therefore Kemeny and Kurtz thought to break such programs into chunks and execute the program a chunk at the time.
+
+Actually, the `CHAIN` *filename* command is equivalent to the sequence `LOAD` *filename* followed by `RUN`. But, consider
+
+    >10 REM Program Hello
+    >20 PRINT "Hello!"
+    >save "hello"
+    >new
+    >10 REM Program Foo
+    >20 LOAD "hello"
+    >30 RUN
+    >save "foo"
+    >list
+      10 REM Program Foo
+      20 LOAD "hello"
+      30 RUN
+    >run
+    ILLEGAL INSTRUCTION
+
+What went wrong? That `LOAD "hello"` statement at line 20 of program *foo*, when executed, drops the current program and loads the new one, *hello*. However, the intruction pointer of the interpreter is still pointing after line 20 of the *foo* program, where the line 30 was: but such a line does not exist anymore. Indeed, we ask to list the current program and we get lines 10 and 20 of the *hello* one. Even on writing
+
+    >10 REM Program Foo
+    >20 LOAD "hello": RUN
+    >run
+    ILLEGAL INSTRUCTION
+
+we still get an error: indeed the instruction pointer points not to any legal instruction anymore. Consider instead
+
+    >10 REM Program Chain
+    >20 CHAIN "hello"
+    >save "chain"
+    >run
+    >Hello!
+    >
+
+The `CHAIN` instruction erase the current program before loading the chained one, but does not delete variables: consider
+
+    >10 REM A
+    >20 LET A = 10
+    >30 PRINT "This is A, now chain B"
+    >40 CHAIN "b"
+    >save "a"
+    >10 rem B
+    >20 LET B = 20
+    >30 print "This is B, now chain C"
+    >40 chain "c"
+    >save "b"
+    >10 REM C
+    >20 PRINT A + B
+    >30 PRINT "This is C, bye"
+    >save "c"
+    >load "a"
+    >run
+    This is A, now chain B
+    This is B, now chain C
+    30
+    This is C, bye
+    >
+
+By means of che `CHAIN` instruction, a program can generate another program and execute it: this technique will be shown in one of the sample programs in the last part of this tutorial.
 
 ### Files
 
+The line editor of the previous section is quite useless, since data is lost when we exit the program: to remedy, we can use files. StrayBasic only provides text files, while classical and most street Basics provides also binary files. As far as files are concerned, classical and street Basics provided different syntaxes, depending on the hardware equipments of the implementation. StrayBasic adopts an approach similar to most street Basics, via the `OPEN/CLOSE` statement used to open and associate to a *channel* a specific file on the disk. The file name should be the one used in the hosting operating system to refer to the file.
+
+The `OPEN` statement takes three parameters: a channel number, thus an integer from 1 to 4 which is associated to a specific file, a string containing the exact name of the file to open and to associate to the channel and a "mode flag" which is 0 for a read only file, 1 for writing on a file erasing its previous contents and 2 for appending on an existing file. The `CLOSE` statement just needs the channel number to close the file and free the channel, so that another `OPEN` statement could use it. To read from and write to the file one uses the `INPUT` and `PRINT` statement in a particular form that specifies the channel to read from/write to.
+
+For example, the following program copies a file into another one: if the second file does not exist, it is created, else it is erased before writing on it.
+
+      10 REM Copy file SOURCE$ to TARGET$
+      20 INPUT "File to copy"; SOURCE$
+      30 INPUT "File to write"; TARGET$
+      40 OPEN 1, SOURCE$, 0: REM OPEN FOR READING
+      50 OPEN 2, TARGET$, 1: REM OPEN FOR WRITING
+      60 IF EOF 1 THEN 100
+      70 LINPUT#1, X$
+      80 PRINT#2, X$
+      90 GOTO 60
+     100 CLOSE 2
+     110 CLOSE 1
+
+The `EOF(n)` function returns 1 if the file associated to channel `n` is ended, thus all its elements have been read. We use the `LINPUT` function so we read an entire line into `X$`: if the line is empty, no error occurs but `X$` is set to the empty string.
+
+Now we can modify the previous line editor program to support file handling.
+
+    10 REM Simple Line Editor
+    20 LET N = 1024: REM Maximum number of lines in a file
+    30 DIM T$(N): REM The list of all file lines
+    40 LET TOP = 1: REM First free line
+    50 LET CHANGED = 0: REM 1 if there are unsaved changes
+    100 CLS: REM This command clears the screen
+    120 PRINT "A simple line editor"
+    124 PRINT ,"0) Exit"
+    126 PRINT ,"1) List the current buffer"
+    128 PRINT ,"2) Append a line"
+    130 PRINT ,"3) Delete a line"
+    132 PRINT ,"4) Insert a line"
+    134 PRINT ,"5) Update a line"
+    135 PRINT ,"6) Save to file"
+    136 PRINT ,"7) Load from file"
+    140 INPUT "Choose a task"; C
+    160 ON C + 1 GOSUB 900, 1000, 1100, 1200, 1300, 1400, 1500, 1600
+    170 GOTO 120
+    900 REM SUBROUTINE: Check against unsaved changes and stop
+    910 IF CHANGED = 0 THEN 950
+    920 INPUT "Save changes (y/n)"; X$
+    930 IF X$ = "y" OR X$ = "Y" THEN GOSUB 1500
+    950 STOP
+    1000 REM SUBROUTINE: List the current buffer
+    1010 FOR I = 1 TO TOP - 1
+    1020 PRINT "["I"] " T$(I)
+    1030 NEXT I
+    1040 RETURN
+    1050 REM SUBROUTINE: Query the user for a line number and store it into L
+    1051 REM If the inserted line is invalid, OK is set to 0 else to 1
+    1055 LET OK = 0
+    1060 INPUT "Line Number? "; L
+    1065 LET L = INT L
+    1070 IF L < 1 OR L >= TOP THEN PRINT "Invalid line number!": RETURN
+    1080 LET OK = 1
+    1090 RETURN
+    1100 REM SUBROUTINE: Append a line to the current buffer
+    1110 IF TOP > N THEN PRINT "No more space for lines!": RETURN
+    1120 INPUT "?"; T$(TOP)
+    1130 LET TOP = TOP + 1
+    1140 LET CHANGED = 1
+    1190 RETURN
+    1200 REM SUBROUTINE: Delete a line from the current buffer
+    1210 GOSUB 1050: IF NOT OK THEN RETURN
+    1230 REM Shifts leftward all lines from the L-th
+    1240 LET TOP = TOP - 1
+    1250 FOR I = L TO TOP - 1
+    1260 LET T$(I) = T$(I + 1)
+    1270 NEXT I
+    1280 LET CHANGED = 1
+    1290 RETURN
+    1300 REM SUBROUTINE: Insert a line before another one
+    1305 IF TOP > N THEN PRINT "No more space for lines!": RETURN
+    1310 GOSUB 1050: IF NOT OK THEN RETURN
+    1330 REM Shift rightward
+    1340 FOR I = TOP TO L + 1 STEP -1
+    1350 LET T$(I) = T$(I - 1)
+    1360 NEXT I
+    1370 INPUT "Line to insert? "; T$(L)
+    1380 TOP = TOP + 1
+    1385 LET CHANGED = 1
+    1390 RETURN
+    1400 REM SUBROUTINE: Insert a line before another one
+    1405 IF TOP > N THEN PRINT "No more space for lines!": RETURN
+    1410 GOSUB 1050: IF NOT OK THEN RETURN
+    1430 INPUT "New line? "; T$(L)
+    1435 LET CHANGED = 1
+    1440 RETURN
+    1500 REM SUBROUTINE: Save the file
+    1510 INPUT "Save with name:"; N$
+    1520 OPEN 1, N$, 1
+    1530 FOR I = 1 TO TOP - 1
+    1540 PRINT #1, T$(I)
+    1550 NEXT I
+    1560 CLOSE 1
+    1570 LET CHANGED = 0
+    1580 RETURN
+    1600 REM SUBROUTINE: Load a file
+    1610 INPUT "Load file:"; N$
+    1620 OPEN 1, N$, 0
+    1630 LET TOP = 1
+    1640 IF EOF(1) THEN 1680
+    1650 LINPUT #1, T$(TOP)
+    1660 LET TOP = TOP + 1
+    1670 GOTO 1640
+    1680 CLOSE 1
+    1685 LET CHANGED = 0
+    1690 RETURN
+
+We changed the `ON` instruction at line 160 to include a new subroutine which deals with the case `C = 0`: before exiting we check against unsaved changes and possibly save the program by calling the new subroutine at line 1500. We also defined a new variable `CHANGED` which keeps track of changes in the program, so to catch unsaved changes when exiting.
+
+### Error handling
+
+It it easy to crash the file version of the line editor program: that occurs usually when data are inserted either from the terminal or from a file. For example, at line 140 we ask a number `C` to choose the task to do: but, if the user inserts a number out of range, or neither a number at all, an error will occur.
+
+It is safer to prompt for a string usually, and then convert to a number: in this case, the following changes may fix this possible error:
+
+    140 INPUT "Choose a task"; C$
+    150 IF LEN C$ <> 1 THEN 140
+    155 IF C$ < "0" OR C$ > "7" THEN 140
+    160 ON VAL C$ + 1 GOSUB 900, 1000, 1100, 1200, 1300, 1400, 1500, 1600
+
+We use `VAL C$` to convert the digit to a number, then add 1 since the `ON` list assumes that the first label to jump to correspond to the value 1 of the numerical expression following `ON`.
+
+However, input errors from files are not so easy to deal with: consider the subroutine at line 1600:
+
+    1600 REM SUBROUTINE: Load a file
+    1610 INPUT "Load file:"; N$
+    1620 OPEN 1, N$, 0
+    1630 LET TOP = 1
+    1640 IF EOF(1) THEN 1680
+    1650 LINPUT#1, T$(TOP)
+    1660 LET TOP = TOP + 1
+    1670 GOTO 1640
+    1680 CLOSE 1
+    1685 LET CHANGED = 0
+    1690 RETURN
+
+The program prompts the user for a file name: but what if this name does not correspond to any available file in the OS? The `OPEN` statement fails in this case, with a `CANNOT OPEN FILE` error. The program would break.
+
+StrayBasic provides a device to prevent these errors, which is the device of many street Basics of the 70s and 80s, and which is a simple exception handling mechanism: the `ON ERROR` statement.
+
+Consider inserting the following lines in the subroutine at 1600:
+
+    1600 REM SUBROUTINE: Load a file
+    1610 INPUT "Load file:"; N$
+    1615 ON ERROR 1695
+    1620 OPEN 1, N$, 0
+    1625 ON ERROR 1680
+    1630 LET TOP = 1
+    1640 IF EOF(1) THEN 1680
+    1650 LINPUT#1, T$(TOP)
+    1660 LET TOP = TOP + 1
+    1670 GOTO 1640
+    1680 CLOSE 1
+    1685 LET CHANGED = 0
+    1686 ON ERROR 0
+    1690 RETURN
+    1695 PRINT "CANNOT OPEN FILE "N$"!"
+    1696 GOTO 1686
+    
+When executed, the `ON ERROR n` statement sets to the line number `n` the line where to jump in case of error: if `n = 0` then usual error discipline is restored, thus in case of error the execution is stopped with a message, else `n` should be the number of an actual program line, so that, when an error occurs, a `GOTO n` is performed. For example, at line 1615 we set the error line to be line 1695: that's because, if the `OPEN` statement fails, the subroutine prints the message at line 1695, next the line 1686 is executed, that reset the error catching to the default one. At line 1625, the error line is set to 1680, instead, so that on an input error, the routine will terminate as if the end of the file has been reached.
+
+The `ERR` built-in function, which takes no parameters, returns the last error inside an `ON ERROR` routine. One can use it to check the nature of the error, so the previous code could be rewritten as
+
+    1600 REM SUBROUTINE: Load a file
+    1610 INPUT "Load file:"; N$
+    1615 ON ERROR 1675
+    1620 OPEN 1, N$, 0
+    1630 LET TOP = 1
+    1640 IF EOF(1) THEN 1680
+    1650 LINPUT#1, T$(TOP)
+    1660 LET TOP = TOP + 1
+    1670 GOTO 1640
+    1675 IF ERR = 11 THEN PRINT "CANNOT OPEN FILE "N$"!": SKIP
+    1680 CLOSE 1
+    1685 LET CHANGED = 0
+    1686 ON ERROR 0
+    1690 RETURN
+
+We moved the error line at 1675 and let it check whether `ERR = 11`, since 11 is the error code raised by the `OPEN` statement if it fails. Notice the `SKIP` statement ending line 1675: its effect is to skip the following line, the 1680, indeed if we could not open the file then to try to close it would give rise to an error, too.
+
+One error can be explicitly raised via the `ERROR` command:
+
+    ERROR n
+
+where `n` is the code of the error to raise. One can use any integer number, so that user defined error codes could be defined, and then `ON ERROR` and `ERR` could be used to deal with them.
+
+Files can also be used to store data, not just texts. The following program reads a list of records set up by a code, a string and a numerical value, for example they could represent order code, product name and price of products to sell or buy. Items are stored one per line and their attributes are comma separated. An example of such a file can be:
+
+    1, "Knuth, The Art of Computer Programming, vol.1", 80
+    2, "Kernighan-Ritchie, The C Programming Language", 35
+    3, "Abelson-Sussman, Structure and Interpretation of Computer Programs", 60
+    4, "Brooks, The Mythical Man-Month", 30
+    5, "Kemeny-Kurtz, Programming in Basic", 40
+
+Notice that we put strings between quotes since they contain commas. After loading them, the user can look for the name of a product and recover its code and price.
+
+      10 REM Product search
+      20 LET INFILE$ = "items.csv"
+      30 LET N = 1024: REM Max number of items in a file
+      40 DIM ID(N), NAME$(N), PRICE(N)
+      50 OPEN 1, INFILE$, 0
+      60 LET NI = 0
+      70 IF EOF(1) THEN 110
+      80 LET NI = NI + 1
+      85 IF NI > N THEN PRINT "TOO MANY ITEMS IN FILE!": STOP
+      90 INPUT#1, ID(NI), NAME$(NI), PRICE(NI)
+     100 GOTO 70
+     110 CLOSE 1
+     120 INPUT "Text to look for (empty to stop)", T$
+     130 IF T$ = "" THEN STOP
+     140 FOR I = 1 TO NI
+     150 REM Looks for T$ as a substring of NAME$(NI)
+     160 IF LEN T$ > LEN(NAME$(I)) THEN 220
+     170 FOR J = 1 TO LEN(NAME$(I)) - LEN T$
+     180 IF MID$(NAME$(I), J, LEN T$) <> T$ THEN 210
+     190 PRINT NAME$(I)" COSTS "PRICE(I)"€"
+     200 GOTO 220
+     210 NEXT J
+     220 NEXT I
+
+### Remaining stuff
+
+If you get here, you learned StrayBasic! Actually, there are some more statement and features not yet described, they are explained in this section: as each Basic dialect, even StrayBasic has some specific features.
+
+First of all, let us complete our knowledge of the `PRINT` statement: generally speaking, after the `PRINT` keyword it may appear:
+
+- nothing, which causes a new line to be printed;
+- a series of expressions separated by commas or semicolons; such expressions are evaluated (either to numbers or to strings) and the result printed; when separated by commas, elements are printed at the next tabulation position, when separated by semicolons they are printed with no spaces in between;
+- comma and semicolons may be repeated at will, and they may also be the last item in the list, in which case no newline is issued after printing the list;
+- semicolons may usually be omitted.
+
+Examples:
+
+    >PRINT
+
+    >PRINT 1,2,3
+    1              2               3
+    >PRINT 1;"2";1+1+1
+    123
+    >PRINT 1,
+    1              >PRINT 1,,,2
+    1                                              2
+    >PRINT 1 2 3
+    123
+    >PRINT 2-1 3-1 4-1
+    123
+    >PRINT 1 -2 -3
+    -4
+    >
+
+Notice the last one: the interpreter tries to extend an expression as far as possible, so the sequence `1 -2 -3` is interpreted as `1-2-3` which is an expression resulting in `-4`: in this case, we need to use the semicolon.
+
+We have already encountered the `CLS` command that clear the screen and set the cursor position to the leftmost-topmost character on the terminal. If the terminal inside which StrayBasic runs is compliant to the standard Unix terminals, then some commands will work properly. The first one is `CLS` itself, which works by issuing special control characters to the terminal.
+
+There are a couple of StrayBasic functions that always return the empty string, but that have side effects on where `PRINT` will print the next character. The `TAB(n)` function sets the print position to column `n`, were columns are indexed from 1 to a constant `C` depending on the terminal; if `n < 1` then is it assumed that `n = 1`; if `n > C`, then `n` is divided by such number of column and `TAB` is executed on the rest of this division.
+
+For example:
+
+    >PRINT TAB(10) "*"
+             *
+    >PRINT TAB(50) "*"
+                                                     *
+    >PRINT TAB(79) "*"
+                                                                                  *
+    >PRINT TAB(80) "*"
+    *
+
+The last statement shows that the number of coumns is in this case 80, so after `TAB(80)` any character will be printed at the 81-th column, so at the first one, since 81 divided by 80 has rest 1.
+
+To get the number of columns supported by the terminal, use the function `COL` which takes no parameter but returns the number of columns (or `-1` if the terminal cannot be queried for such an information). In the same way, the `ROW` parameterless function returns the number of rows of the terminal, or `-1` if the terminal cannot be queried for such an information. Row 1 is the topmost one, and column 1 is the leftmost one.
+
+Each character on the terminal is addressed by a pair `(n,m)` in this way, and the `AT(n,m)` function, still returning the empty string, changes the print position to line `n` and column `m`.
+
+For example, the following program first clears the screen with a `CLS` statement, next draw a diagonal line:
+
+    10 CLS
+    20 FOR I = 1 TO ROW
+    30 PRINT AT(I,I) "*"
+    40 NEXT I
+
+Next we have a specific StrayBasic command, `ATTR`, which is used to set screen properties as follows: use it as
+
+    ATTR key = value, ...
+
+where keys can be one of: `BLINK BOLD BRIGHT REVERSE UNDER BACK FORE` and values can be numbers. One or more key may be preset at will in the attribute list.
+
+- The `BACK` property decides the colour of characters background: its value should be an integer number between 0 and 7, which is considered as a three bits binaru number rgb.
+- The `FORE` property decides the colour of characters foreground: its value should be an integer number between 0 and 7, which is considered as a three bits binaru number rgb.
+- The `BOLD` property decides if the character is printed in bold face (value 1) or not (value 0).
+- The `BLINK` property decides if the character is printed blinking (value 1) or not (value 0).
+- The `BRIGHT` property decides if the character is printed brighter than usual (value 1) or not (value 0).
+- The `REVERSE` property decides if the character is printed with foreground and background reversed (value 1) or not (value 0).
+- The `UNDER` property decides if the character is printed as underlined (value 1) or not (value 0).
+
+For example, we can print some colour names in the colours themselves:
+
+    10 ATTR FORE = 0: PRINT "BLACK"
+    20 ATTR FORE = 1: PRINT "BLUE"
+    30 ATTR FORE = 2: PRINT "GREEN"
+    40 ATTR FORE = 3: PRINT "CYAN = BLUE + GREEN"
+    50 ATTR FORE = 4: PRINT "RED"
+    60 ATTR FORE = 5: PRINT "VIOLET = RED + BLUE"
+    70 ATTR FORE = 6: PRINT "YELLOW = RED + GREEN"
+    80 ATTR FORE = 7: PRINT "WHITE = BLUE + RED + GREEN"
+    90 ATTR FORE = 2
+
+The statement on line 100 restores the default green colour of the interpreter. We could reverse, underline and bold those texts by adding two lines
+
+    5 ATTR BOLD = 1, REVERSE = 1, UNDER = 1
+    95 ATTR BOLD = 0, REVERSE = 0, UNDER = 0
+
+Try to play with `ATTR`, it may happens that not all its property will properly(!) work on your terminal.
+
+A popular function among street Basics was the `INKEY$` one: it returns the character corresponding to the pressed key. It is supported by StrayBasic, but via the GNU/Linux standard library: to make StrayBasic more portable, it should use a version of `ncurses` but unluckily laziness prevented this.
+
+Namely, in StrayBasic, `INKEY$` expects the user to press any key before returning its value. I'll show an example of all these terminal-oriented stuff by programming a simple game in the next chapter.
+
+What else? Yep! The `RANDOMIZE` function: this can be used to reset the pseudo-random number series to a certain point. The `RND` function cannot generate truly random numbers, instead it keeps on generating numbers from a sequence whose elements "seems like" random but are actually generated by an algorithm. When the program starts, the index of the sequence is reset, so that each time the program runs the `RND` assumes always the same values.
+
+For example, try:
+
+    >10 PRINT RND, RND, RND, RND
+    >RUN
+    0.840188       0.394383        0.783099        0.79844
+    >RUN
+    0.840188       0.394383        0.783099        0.79844
+    >RUN
+    0.840188       0.394383        0.783099        0.79844
+    >
+
+This behavior preserves the determinism of the program, for example we can test the program running it time and again and get the same sequence of values of `RND` calls. However, if we want to get a different sequence any time, we can use the `RANDOMIZE` statement, which scrumble the starting point of the pseudo-random number sequence somehow. For example:
+
+    >10 RANDOMIZE
+    >20 PRINT RND, RND, RND, RND
+    >RUN
+    0.377653       0.785811        0.515028        0.234914
+    >RUN
+    0.237492       0.702525        0.82163         0.0568017
+    >RUN
+    0.0930361      0.611893        0.120664        0.873546
+    >
+
+The `TIME` parameterless function returns the number of seconds elapsed from the launch of the interpreter: we can use it to measure time intervals, for example: how many times we can increase a variable and repeat a loop within one second? We measure it time and again and next we take the mean.
+
+    10 LET ITER = 0
+    20 LET N = 1000
+    30 FOR I = 1 TO 1000
+    40 LET T0 = TIME
+    50 FOR J = 1 TO 1e20
+    60 IF T0 < TIME THEN 80
+    70 NEXT J
+    80 LET ITER = ((ITER * (I + 1)) + J) / I
+    90 NEXT I
+    100 PRINT "AVERAGE ITERATIONS = "ITER
+
+
+>run
+    I = 436174
+
+Last but not least we have the `SYS` command, which takes a string and send it to the hosting operating system to be executed. For example you can list the contents of the current folder with
+
+    SYS "ls"
+
+Not any shell command will be executed of course, but this can be useful to avoid exiting StrayBasic to check something.
+
 ## Examples
 
-### A linear algebra library
+Now that we know all the Basic features of StrayBasic, we can program with it: I'll show some example of non trivial programs that can be run within the 64Kb of the StrayBasic virtual machine.
 
-### A Markovian bullshit generator
+### A magic squares generator
+
+### Function plotter
+
+chiede y = f(x) e la disegna in modo rudimentale con asterischi, croci, etc.
+
+prima lo fai per una singola funzione, poi usa il trucco delle chain per fare in modo che scriva un programma che calcola per una funzione specifica modificando se stesso, salvandosi e concatenandosi.
 
 ### A Bayes text classifier
+
+### A Markovian bullshit generator
 
 ### A screen text editor
 
@@ -1411,11 +1966,9 @@ Let us program a simple screen editor to edit text files, for example, Basic pro
 
 Our editor will allow to deal with a single file at once, to load it, or define it from scratch, save it, and modify it.
 
-
-### Function plotter
-
-chiede y = f(x) e la disegna in modo rudimentale con asterischi, croci, etc.
-
 ### A 2D game
 
 un pupazzetto che si muove su un piano e deve saltare da un piano all'altro evitando ostacoli.
+
+### A Basic interpreter
+
