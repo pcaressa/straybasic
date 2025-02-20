@@ -1924,37 +1924,330 @@ This behavior preserves the determinism of the program, for example we can test 
 The `TIME` parameterless function returns the number of seconds elapsed from the launch of the interpreter: we can use it to measure time intervals, for example: how many times we can increase a variable and repeat a loop within one second? We measure it time and again and next we take the mean.
 
     10 LET ITER = 0
-    20 LET N = 1000
-    30 FOR I = 1 TO 1000
+    15 LET N = 10
+    20 DIM A(N)
+    30 FOR I = 1 TO N
     40 LET T0 = TIME
-    50 FOR J = 1 TO 1e20
-    60 IF T0 < TIME THEN 80
-    70 NEXT J
-    80 LET ITER = ((ITER * (I + 1)) + J) / I
+    50 FOR DT = 1 TO 1e20
+    55 LET T1 = TIME
+    60 IF T0 < T1 THEN 80
+    70 NEXT DT
+    80 LET A(I) = DT
     90 NEXT I
-    100 PRINT "AVERAGE ITERATIONS = "ITER
+    100 LET AVG = 0
+    110 FOR I = 1 TO N
+    120 LET AVG = AVG + A(I) / N
+    130 NEXT I
+    150 PRINT AVG " AVERAGE ITERATIONS IN " T1 - T0 " SECONDS."
 
+    >run
+    1.36414e+06 AVERAGE ITERATIONS IN 1 SECONDS.
 
->run
-    I = 436174
+For debug purposes, one should inspect the variables, for example the `DUMP` statement prints them, or also activate the `TRACE` option: by the statement `TRACE 1` all subsequent statements will be printed on the screen, along with their line number, before being executed. To turn off tracing, type `TRACE 0`.
 
 Last but not least we have the `SYS` command, which takes a string and send it to the hosting operating system to be executed. For example you can list the contents of the current folder with
 
     SYS "ls"
 
-Not any shell command will be executed of course, but this can be useful to avoid exiting StrayBasic to check something.
+Not any shell command will be executed of course (typically you wouldn't be able to change the directory), but this can be useful to avoid exiting StrayBasic to check something.
 
 ## Examples
 
-Now that we know all the Basic features of StrayBasic, we can program with it: I'll show some example of non trivial programs that can be run within the 64Kb of the StrayBasic virtual machine.
+Now that we know *all* the features of StrayBasic, we can program with it: I'll show some example of non trivial programs that can be run within the 64Kb of the StrayBasic virtual machine.
 
 ### A magic squares generator
 
+
+
 ### Function plotter
 
-chiede y = f(x) e la disegna in modo rudimentale con asterischi, croci, etc.
+With no graphic available, it may seems to be odd that one can plot function's graphs with Basic, but indeed this is a standard example, to be found even in classical Basic 60s books.
 
-prima lo fai per una singola funzione, poi usa il trucco delle chain per fare in modo che scriva un programma che calcola per una funzione specifica modificando se stesso, salvandosi e concatenandosi.
+On a line-oriented system, we can plot the graph of a function clockwise rotated by 90 degrees, as follows:
+
+    10 REM PLOT A FUNCTION
+    20 DEF FNF(X) = COS(X)
+    30 LET X0 = -3.15
+    40 LET X1 = 3.15
+    50 LET Y0 = -2
+    60 LET Y1 = 2
+    70 LET DX = 1/4
+    80 LET DY = 1/10
+    100 FOR X = X0 TO X1 STEP DX
+    110 LET Y = FNF(X)
+    120 IF Y0 <= Y AND Y <= Y1 THEN PRINT TAB((Y - Y0)/DY) "*"
+    130 NEXT X
+
+The plot is bounded along `X` variable between `X0` and `X1`, with step `DX`, and along `Y` between `Y0` and `Y1`. The step `DY` is used to rescale the `Y` values, so that 10 characters correspond to a length of 1.
+
+Let's try it:
+
+    >RUN
+             *
+             *
+              *
+               *
+                 *
+                   *
+                      *
+                        *
+                           *
+                             *
+                              *
+                                *
+                                *
+                                *
+                                *
+                               *
+                             *
+                           *
+                         *
+                      *
+                    *
+                 *
+               *
+              *
+             *
+             *
+    >
+
+We can also draw the x-axis:
+
+    10 REM PLOT A FUNCTION
+    20 DEF FNF(X) = COS(X)
+    30 LET X0 = -3.15
+    40 LET X1 = 3.15
+    50 LET Y0 = -2
+    60 LET Y1 = 2
+    70 LET DX = 1/4
+    80 LET DY = 1/10
+    100 FOR X = X0 TO X1 STEP DX
+    110 LET Y = FNF(X)
+    115 REM PLOT Y AXIS
+    120 IF X <= 0 AND X + DX > 0 THEN FOR I = 1 TO (Y1 - Y0)/DY: PRINT "-";:NEXT I
+    125 REM PLOT X AXIS
+    130 IF Y0 <= 0 AND 0 <= Y1 THEN PRINT TAB(-Y0/DY) "|";
+    135 REM PLOT CURVE POINT
+    140 IF Y0 <= Y AND Y <= Y1 THEN PRINT TAB((Y - Y0)/DY) "*";
+    145 PRINT
+    150 NEXT X
+
+We plot the `y` axis by inserting a horizontal line in correspondence of the value of `X` closer to 0, while we plot the `x` axis just drawing a piece of it each time we draw a point of the function. Let us try it:
+
+    >RUN
+             *         |
+             *         |
+              *        |
+               *       |
+                 *     |
+                   *   |
+                      *|
+                       |*
+                       |   *
+                       |     *
+                       |      *
+                       |        *
+    -------------------|--------*-----------
+                       |        *
+                       |        *
+                       |       *
+                       |     *
+                       |   *
+                       | *
+                      *|
+                    *  |
+                 *     |
+               *       |
+              *        |
+             *         |
+             *         |
+    >
+
+Nice, isn't it?
+
+But, how can we make the function to be inserted by the user? A first rough solution is to change line 20 each time we want the graph of a new variable. However, by means of the `CHAIN` statement, we can create a program that plots a specific function and then execute it!
+
+    10 REM Prompts for a function and create the appropriated plotting program.
+    20 PRINT "Insert an expression depending ONLY on variable X"
+    30 LINPUT E$
+    40 INPUT "Insert X interval X0, X1", X0, X1
+    50 INPUT "Insert Y interval Y0, Y1", Y0, Y1
+    60 INPUT "Insert DX, DY", DX, DY
+    70 LET Q$ = CHR$(34): REM Double quote
+    100 OPEN 1, "templot", 1
+    110 PRINT#1, "10 REM PLOT FUNCTION " + E$
+    120 PRINT#1, "20 DEF FNF(X) = " + E$
+    130 PRINT#1, "30 LET X0 = " + STR$(X0)
+    140 PRINT#1, "40 LET X1 = " + STR$(X1)
+    150 PRINT#1, "50 LET Y0 = " + STR$(Y0)
+    160 PRINT#1, "60 LET Y1 = " + STR$(Y1)
+    170 PRINT#1, "70 LET DX = " + STR$(DX)
+    180 PRINT#1, "80 LET DY = " + STR$(DY)
+    200 PRINT#1, "100 FOR X = X0 TO X1 STEP DX"
+    210 PRINT#1, "110 LET Y = FNF(X)"
+    220 PRINT#1, "120 IF X <= 0 AND X + DX > 0 THEN FOR I = 1 TO (Y1 - Y0)/DY: PRINT " Q$ "-" Q$ ";: NEXT I"
+    230 PRINT#1, "130 IF Y0 <= 0 AND 0 <= Y1 THEN PRINT TAB(-Y0/DY) " Q$ "|" Q$ ";"
+    240 PRINT#1, "140 IF Y0 <= Y AND Y <= Y1 THEN PRINT TAB((Y - Y0)/DY) " Q$ "*" Q$ ";"
+    245 PRINT#1, "145 PRINT"
+    250 PRINT#1, "150 NEXT X"
+    290 CLOSE 1
+    300 REM Now load and run the program just saved.
+    310 CHAIN "templot"
+
+For example:
+
+    >RUN
+    Insert an expression depending ONLY on variable X
+    EXP(-X^2)
+    Insert X interval X0, X1?-3,3
+    Insert Y interval Y0, Y1?-1,2
+    Insert DX, DY?0.25, 0.1
+             *
+             *
+             *
+             *
+             *
+             *
+             |*
+             | *
+             |  *
+             |    *
+             |      *
+             |        *
+    ---------|---------*----------
+             |        *
+             |      *
+             |    *
+             |  *
+             | *
+             |*
+             *
+             *
+             *
+             *
+             *
+             *
+    >
+
+Notice that the current program now is "templot", just type `LIST` to see it.
+
+By means of this `CHAIN` one can in general use a program to build another program and run it.
+
+However, this plotting program still has a bitter taste, since we are drawing up to a 90° rotation. How can we get rid of that? I propose two ways: the first one is more portable, the second one relies on the `AT` function and to port it the program should be modified.
+
+In the first place, instead of drawing by the `PRINT` function, we could store inside an array the graph and then print it the right way. Let us see how to do that on the plotting program, leave to the reader to adapt this special program to the general case by the `CHAIN` trick.
+
+    10 REM PLOT A FUNCTION
+    20 DEF FNF(X) = EXP(-X^2)
+    30 LET X0 = -2
+    35 LET X1 = 2
+    40 LET Y0 = -0.2
+    45 LET Y1 = 1.2
+    50 LET DX = 1/8
+    55 LET DY = 1/10
+    60 LET N = 1 + (X1 - X0)/DX
+    65 LET M = 1 + (Y1 - Y0)/DY
+    70 DIM P(N,M)   ' P(N,M) = 0 (blank), 1 (*), 2 (-), 3(|) 
+    100 FOR X = X0 TO X1 STEP DX
+    105 LET IX = 1 + (X - X0)/DX
+    110 LET Y = FNF(X)
+    115 REM PLOT Y AXIS
+    120 IF X <= 0 AND X + DX > 0 THEN FOR J = 1 TO M: LET P(IX,J) = 2: NEXT J
+    125 REM PLOT X AXIS
+    130 IF Y0 <= 0 AND 0 <= Y1 THEN LET P(IX,1 - Y0/DY) = 3
+    135 REM PLOT CURVE POINT
+    140 IF Y0 <= Y AND Y <= Y1 THEN LET P(IX,1 + (Y - Y0)/DY) = 1
+    150 NEXT X
+    200 REM Now plot the graph
+    205 ATTR BACK = 7, FORE = 0
+    210 FOR J = M TO 1 STEP -1
+    220 FOR I = 1 TO N
+    230 IF P(I,J) = 0 THEN PRINT " ";
+    235 IF P(I,J) = 1 THEN PRINT "*";
+    240 IF P(I,J) = 2 THEN PRINT "|";
+    245 IF P(I,J) = 3 THEN PRINT "-";
+    250 NEXT I
+    260 PRINT
+    270 NEXT J
+    275 ATTR BACK = 0, FORE = 2
+
+Notice that we swap `I` and `J` when printing and also that we run `J` from `M` downward to 1, since the `y` axis is upside down in the `AT` coordinates. We also printed in white background and black foreground the graph:
+
+    >RUN
+                    |                
+                    |                
+                    *                
+                  **|**              
+                 *  |  *             
+                *   |   *            
+               *    |    *           
+              *     |     *          
+             *      |      *         
+            *       |       *        
+          **        |        **      
+        **          |          **    
+    ****-------------------------****
+                    |                
+                    |                
+    >
+
+The result is uglier than before, since in general the height and width are different for characters printed on a terminal (indeed we changed `DX` and `DY` to get a better picture).
+
+Notice that lines 230-245 may be replaced by a single but cumbersome instruction:
+
+230 PRINT CHR$(32 + 10*(P(I,J) = 1) + 92*(P(I,J) = 2) + 13*(P(I,J) = 3));
+
+Indeed, `CHR$(32) = " "`, `CHR$(32+10) = "*"`, `CHR$(32+92) = "|"` and `CHR$(32+13) = "-"` (recall that the result of a relation or of a Boolean operator is always either 0 or 1).
+
+Another solution to print the graph in the correct orientation is to use the `AT` function instead of the `TAB` one:
+
+    10 REM PLOT A FUNCTION
+    20 DEF FNF(X) = EXP(-X^2)
+    30 LET X0 = -2
+    35 LET X1 = 2
+    40 LET Y0 = -0.2
+    45 LET Y1 = 1.2
+    50 LET DX = 1/8
+    55 LET DY = 1/10
+    60 LET N = 1 + (X1 - X0)/DX
+    65 LET M = 1 + (Y1 - Y0)/DY
+    90 CLS
+    100 REM PLOT X AXIS
+    110 IF X0 > 0 OR X1 < 0 THEN 130
+    115 LET K = 1 + Y1/DY
+    120 FOR I = 1 TO N: PRINT AT(K, I) "-": NEXT I
+    125 REM PLOT Y AXIS
+    130 IF Y0 > 0 OR Y1 < 0 THEN 150
+    135 LET K = 1 - X0/DX
+    140 FOR J = 1 TO M: PRINT AT(J, K) "|": NEXT J
+    145 REM PLOT THE FUNCTION GRAPH
+    150 FOR X = X0 TO X1 STEP DX
+    160 LET Y = FNF(X)
+    170 IF Y0 <= Y AND Y <= Y1 THEN PRINT AT(1 + (Y1 - Y)/DY, 1 + (X - X0)/DX) "*"
+    180 NEXT X
+
+Notice that, at linee 170, we compute the `y` coordinate by using `(Y1 - Y)/DY`, since the `y` axis is upside down in the `AT` coordinates.
+
+    >RUN
+                    |
+                   ***
+                 ** | **
+                *   |   *
+               *    |    *
+             **     |     **
+            *       |       *
+          **        |        **
+        **          |          **
+    ****------------|------------****
+    >               |
+                    |
+                    |
+                    |
+                    |
+
+Question: what happens if we enclose lines 90-180 between a pair of `ATTR BACK = 7, FORE = 0` and `ATTR BACK = 0, FORE = 2`?
+
+OK, 'nuff said about function plots.
 
 ### A Bayes text classifier
 
@@ -1971,4 +2264,6 @@ Our editor will allow to deal with a single file at once, to load it, or define 
 un pupazzetto che si muove su un piano e deve saltare da un piano all'altro evitando ostacoli.
 
 ### A Basic interpreter
+
+The final example will be a very non trivial one: I'll show you a complete interpreter for the first version of the Basic programming language, the one released at Dartmouth College on May 1st 1964.
 
