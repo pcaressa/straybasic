@@ -2271,11 +2271,154 @@ Large Language Models are currently the most famous pieces of software around: t
 
 Here we'll program the simplest case of a LLM, thus a Markovian model.
 
-### A screen text editor
+### BATE (BAsic Text Editor)
 
-Let us program a simple screen editor to edit text files, for example, Basic programs.
+Let us program a simple screen editor to edit text files, for example, Basic programs. BATE (this is the name) will allow to deal with a single file at once: to load it, or create it from scratch, save it, and modify it. The user can insert and edit lines, move with cursors and use the backspace to delete characters.
 
-Our editor will allow to deal with a single file at once, to load it, or define it from scratch, save it, and modify it.
+The screen is divided in three zones: the upper line, called *header*, contains information about the file under editing; the next lines display a portion of the file (the all file if it fits into this area). The last inserted character is marked: the cursor is just after it. The last line, the *footer*, contains a line where commands can be inserted. Normally, pressed keys correspond to character to be appended to the current line in the current file.
+
+Some control keys are intercepted by BATE:
+
+- arrows (left, right, up, down).
+- page up and down.
+- delete and canc
+- enter.
+
+Moreover, if the `ESC` key is pressed, then the next pressed key is interpreted as one of the following commands (the *current line* is the line in which the cursor is positioned).
+
+- `c` copy the current line.
+- `d` duplicate the current line.
+- `f` find a string.
+- `i` insert the copied line before the current one.
+- `k` copy and kill the current line.
+- `m` rename the current file.
+- `n` create a new file (if the current one has unsaved changes, the user is prompted to save it).
+- `o` load a file (if the current one has unsaved changes, the user is prompted to save it).
+- `q` quit the editor (if the current one has unsaved changes, the user is prompted to save it).
+- `s` save the current file.
+- `r` replace a string.
+
+This is a rough command set, according to modern standard: no undo, no text selection, etc. However, this editor makes it easy to work with line oriented texts, as Basic programs (and, of course, it's just an example!).
+
+Since StrayBasic strings are bounded to 254 characters, To keep things simple, the editor does not wrap line longer than the width of the terminal, but one can introduce a line up to 240 characters long: after typing 240 characters, the editor won't process any character other than control ones.
+
+Since this program is long, to save space we drop the `LET` keywords and try to groups statements by colons whenever possible.
+
+10  REM Program data
+50 WIDTH = COL, HEIGHT = ROW
+100 MAXBUF = 1024       ' Max number of buffer lines
+110 DIM BUF$(MAXBUF)    ' Buffer lines
+112 BUFF = 1            ' First free item in BUF
+114 BUFR = 1, BUFC = 1  ' Current row and column in BUF
+116 SAVED = 1           ' 0 if there are unsaved changes
+120 WINR = 1, WINC = 1  ' First row and column to print
+130 NAME$ = "FOO"       ' File name
+140 TABN = 4            ' # of spaces written by a tabulation
+145 REM Footer strings
+150 F1$ = "(c)ut | (d)uplicate | (f)ind | (i)nsert | (k)ill | rena(m)e"
+151 F2$ = "(n)ew | l(o)ad | (q)uit | find and (r)eplace | (s)ave"
+160 CP$ = ""            ' Last copied line
+195     REM Main loop
+200 GOSUB 1000          ' Print the screen
+210 C$ = INKEY$: C = ASC(C$)
+220 IF C = 9 THEN GOSUB 300: GOTO 200   ' Tabulation
+230 IF C = 10 THEN GOSUB 350: GOTO 200  ' Newline
+235 IF C = 127 THEN GOSUB 400: GOTO 200 ' Delete
+240 IF C = 27 THEN GOSUB 500: GOTO 200  ' Escape
+250 IF C < 32 THEN 200  ' Ignore other control characters
+255     REM Character to append to current line
+260 IF BUFC = WIDTH THEN 200    ' Ignore exceeding characters
+270 BUF$(BUFR) = BUF$(BUFR)(TO BUFC) + C$ + BUF$(BUFR)(BUFC + 1 TO)
+280 BUFC = BUFC + 1, SAVED = 0
+290 GOTO 200
+295     REM Handle tabulation character
+300 IF BUFC + TABN > WIDTH THEN 200 ' Ignore if there's no room for it
+310 FOR I = 1 TO TABN
+315 BUF$(BUFR) = BUF$(BUFR)(TO BUFC) + " " + BUF$(BUFR)(BUFC + 1 TO)
+320 BUFC = BUFC + 1
+325 NEXT I
+330 SAVED = 0
+340 RETURN
+345     REM Newline
+350 BUFR = BUFR + 1: BUFC = 1: IF BUFR <= BUFF THEN RETURN
+360 IF BUFF = MAXBUF THEN F1$ = "BUFFER FULL!", F2$ = "": GOTO 1000
+370 BUFF = BUFF + 1
+380 RETURN
+395     REM Delete
+400 IF BUFC = 1 THEN 420
+405 BUFC = BUFC - 1: BUF$(BUFR) = BUF$(TO BUFC) + BUF$(BUFC+1 TO)
+410 RETURN
+420 REM Check if the current line can be joined with the previous one.
+430 IF BUFR = 1 OR LEN(BUF$(BUFR-1)) + LEN(BUF$(BUFR)) > 240 THEN RETURN
+440 GOSUB kill  ' Delete line BUFR
+445 BUFR = BUFR - 1: BUFC = LEN(BUF$(BUF$))
+450 RETURN
+500     REM Escape character
+510 C = ASC(INKEY$)
+515 IF C = 67 OR C = 99 THEN 550    ' C: copy current line
+516 IF C = 68 OR C = 100 THEN 560   ' D: duplicate current line
+517 IF C = 70 OR C = 102 THEN   ' F: Find a string
+518 IF C = 73 OR C = 105 THEN 570   ' I: insert copied line
+519 IF C = 75 OR C = 107 THEN 600   ' K: cut current line
+520 IF C = 77 OR C = 109 THEN   ' M: rename current buffer
+521 IF C = 78 OR C = 110 THEN   ' N: create a new buffer
+522 IF C = 79 OR C = 111 THEN   ' O: open buffer from disk
+523 IF C = 81 OR C = 113 THEN   ' Q: quit
+524 IF C = 82 OR C = 114 THEN   ' R: replace a string
+525 IF C = 83 OR C = 115 THEN   ' S: save current buffer
+530 RETURN
+545     REM Copy current line
+550 CP$ = BUF$(BUFR): RETURN
+555     REM Duplicate current line
+560 CP$ = BUF$(BUFR)
+565     REM Insert the copied line
+570 IF BUFF = MAXBUF THEN F1$ = "BUFFER FULL!", F2$ = "": GOTO 1000
+575 BUFF = BUFF + 1
+580 FOR I = BUFF TO BUFR + 2 STEP -1: BUF$(I) = BUF$(I-1): NEXT I
+585 BUF$(BUFR + 1) = CP$
+590 RETURN
+595     REM Cut the current line
+600 IF BUFF = 1 THEN RETURN
+605 CP$ = BUF$(BUFR)
+610 BUFF = BUFF - 1
+615 FOR I = BUFR TO BUFF - 1: BUF$(I) = BUF$(I+1): NEXT I
+620 IF BUFR > BUFF THEN BUFR = BUFF
+625 RETURN
+645     REM Find a string
+650 
+
+
+
+
+
+1000    REM Refresh the screen
+1005 REM Compute the size of the file
+1010 BUFL = 0
+1012 FOR I = 1 TO BUFF - 1
+1014 BUFL = LEN(BUF$(I)) + 1 ' Add 1 since a newline will be dumped.
+1016 NEXT I
+1018 REM Print header and footer
+1020 CLS: ATTR REVERSE = 1
+1015 PRINT AT(1,1) CHR$(42 - SAVED * 10) "FILE: " NAME$ TAB(16) "SIZE: " BUFL
+1020 PRINT AT(HEIGHT-1,1) FOOT1$ AT(HEIGHT,1) FOOT2$
+1025 F1$ = "(c)ut | (d)uplicate | (f)ind | (i)nsert | (k)ill | rena(m)e"
+1026 F2$ = "(n)ew | l(o)ad | (q)uit | find and (r)eplace | (s)ave"
+1030 ATTR REVERSE = 0
+1035 REM Print the text
+1040 WINC = 1: IF BUFC > WIDTH THEN WIN1 = BUFC - WIDTH
+1045 REM If (BUFR,BUFC) is outside the window to print adjust the window
+1050 IF BUFC > WINC + WIDTH THEN WINC = WINC + 1: REPEAT
+1055 IF BUFC < WINC THEN WINC = WINC - 1: REPEAT
+1060 IF BUFR > WINR + HEIGHT - 3 THEN WINR = WINR + 1: REPEAT
+1065 IF BUFR < WINR THEN WINR = WINR - 1: REPEAT
+1070 PRINT AT(2,1);
+1075 FOR I = WINR TO WINR + HEIGHT - 3
+1080 IF LEN(BUF$(I) - WINC < WIDTH THEN PRINT BUF$(I)(WINC TO): SKIP
+1085 PRINT BUF$(I)(WINC TO WINC + WIDTH)
+1090 NEXT I
+1095 RETURN
+
+
 
 ### A 2D game
 
