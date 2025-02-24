@@ -1,10 +1,10 @@
 /// \file straybasic.c
 /// \author Paolo Caressa <github.com/pcaressa>
-/// \date 20241231
+/// \date 20250228
 /// \todo Assign substrings as in LET X$(2 TO 3) = ...
 /// \todo Calling external programs.
 /// \todo MAT instructions
-/// \todo More functions, such as SPACE$(n), TIME(n) etc.
+/// \todo More functions, such as SPACE$(n), etc.
 /// \todo Multiple line DEF FNs.
 
 #define VERSION "STRAYBASIC 1.0"
@@ -571,21 +571,6 @@ char oper_inkey(void) {
     return c;
 }
 
-/// Check against ctrl-c: if pressed, 1 is returned, else 0.
-int oper_ctrlc(void) {
-    struct termios prev, curr;
-    tcgetattr(0, &prev);
-    curr = prev;                        // Init new settings.
-    curr.c_lflag &= ~(ICANON | ECHO);   // Change settings.
-    curr.c_cc[VMIN] = 0;
-    curr.c_cc[VTIME] = 0;
-    tcsetattr(0, TCSANOW, &curr);       // Set new mode.
-    int c = getchar();
-    tcsetattr(0, TCSANOW, &prev);       // Restore old mode.
-    return c;
-}
-
-
 void OPER_ABS(void) { push_num(fabs(pop_num())); }
 
 void OPER_ACS(void) {
@@ -1061,16 +1046,10 @@ int var_address(addr_t v, addr_t *va) {
 extern void expr(void);
 
 /// Parse an expression, retrieve the result as a number and return it.
-num_t expr_num(void) {
-    expr();
-    return pop_num();
-}
+num_t expr_num(void) { expr(); return pop_num(); }
 
 /// Parse an expression, retrieve the result as a string and return it.
-str_t expr_str(void) {
-    expr();
-    return pop_str();
-}
+str_t expr_str(void) { expr(); return pop_str(); }
 
 /** Compile a sequence of prefix (unary) operators, if any. If the compilation
     ends in an operand on the stack, 0 is returned, else 1. */
@@ -2185,7 +2164,7 @@ int instr_exec(void) {
 #       define I(label) &INSTR_##label,
 #       include "straybasic.h"
     };
-    // Save the current exception buffer: instr_exec may eventually recurse.
+    // Save the current exception buffer, since instr_exec may recurse.
     jmp_buf error_saved;
     memcpy(error_saved, rt.err_buffer, sizeof(jmp_buf));
 Again:
@@ -2204,11 +2183,11 @@ Again:
         if (opcode > CODE_STARTKEYWORD && opcode < CODE_ENDKEYWORD) {
             // Skip the keyword and execute the corresponding INSTR_ routine.
             ++ IP; (*Instructions[opcode - CODE_STARTKEYWORD - 1])();
+        } else
+        if (opcode == CODE_IDN || opcode == CODE_IDNS) {
+            INSTR_LET();    // Instruction of the form "var = expr".
         } else {
-            // Instruction of the form "var = expr".
-            if (opcode != CODE_IDN && opcode != CODE_IDNS)
-                ERROR(ILLEGAL_INSTRUCTION);
-            INSTR_LET();
+            ERROR(ILLEGAL_INSTRUCTION);
         }
         // If END has been reached, IP == NIL.
         if (IP != NIL) {
