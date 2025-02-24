@@ -1959,7 +1959,7 @@ Now that we know *all* the features of StrayBasic, we can program with it: I'll 
 
 
 
-### Function plotter
+### FUNPLOT: A Function plotter
 
 With no graphic available, it may seems to be odd that one can plot function's graphs with Basic, but indeed this is a standard example, to be found even in classical Basic 60s books.
 
@@ -2067,6 +2067,9 @@ Nice, isn't it?
 
 But, how can we make the function to be inserted by the user? A first rough solution is to change line 20 each time we want the graph of a new variable. However, by means of the `CHAIN` statement, we can create a program that plots a specific function and then execute it!
 
+This is the first version of such a program `FUNPLOT`:
+
+    1 REM Program FUNPLOT, v.1, author Paolo Caressa
     10 REM Prompts for a function and create the appropriated plotting program.
     20 PRINT "Insert an expression depending ONLY on variable X"
     30 LINPUT E$
@@ -2249,9 +2252,24 @@ Question: what happens if we enclose lines 90-180 between a pair of `ATTR BACK =
 
 OK, 'nuff said about function plots.
 
-### A Bayes text classifier
+### LVS: Lotka-Volterra simulation
+
+One of the most classical mathematical models of biology is the Lotka-Volterra one, that models the population of two species in a same territory, where one species is herbivore and the other carnivore.
+
+The LVS program should:
+
+- Set up an agent based model to simulate the territory and the two species, and run the simulation in a certain time interval.
+- Compute the solutions of the Lotka-Volterra equations, by numerical approximation, getting the evolution of the two populations.
+- Compare the results.
+
+The fun is to program the ABM simulation.
+
 
 ### A Markovian bullshit generator
+
+Large Language Models are currently the most famous pieces of software around: they are highly non linear models for the probability distribution of human languages, as inferred from tons of raw texts. Moreover, there are some pre- and post-processing phases, related to translate texts into sequences of vectors, embed those vectors in a clever way in a vector space etc. etc.
+
+Here we'll program the simplest case of a LLM, thus a Markovian model.
 
 ### A screen text editor
 
@@ -2263,7 +2281,113 @@ Our editor will allow to deal with a single file at once, to load it, or define 
 
 un pupazzetto che si muove su un piano e deve saltare da un piano all'altro evitando ostacoli.
 
-### A Basic interpreter
+### DBC: A Basic compiler
 
-The final example will be a very non trivial one: I'll show you a complete interpreter for the first version of the Basic programming language, the one released at Dartmouth College on May 1st 1964.
+The final example will be a very non trivial one: I'll show you a complete compiler for the first version of the Basic programming language, the one released at Dartmouth College on May 1st 1964. The name of the project is DBC (Dartmouth Basic Compiler)
+
+The idea is to simulate the experience of using the first Basic version on the Dartmouth Time-Sharing System, as described in the first issued manual of the language [https://www.dartmouth.edu/basicfifty/basicmanual_1964.pdf](https://www.dartmouth.edu/basicfifty/basicmanual_1964.pdf). The user will be prompted to insert a program line or a command, much like is done in StreetBasic, but commands are not Basic statements, but commands of the Time-Sharing system:
+
+- `BYE`: end the session.
+- `LIST`: list the current program.
+- `NEW`: erase the current file.
+- `OLD`: load an already existing program from the disk.
+- `REPLACE`: save the current program on an already existing file, replacing it.
+- `RUN`: run the program.
+- `SAVE`: save the current program on a new file.
+- `UNSAVE`: delete a file from the directory.
+
+Some commands expect a parameter, typically a file name, which is prompted after the command is issued.
+
+The Basic version implemented is the very first one, which consists in the following statements:
+
+- `DATA` c,... Introduces internal data
+- `DEF FN`l`(`x`) =` e Introduces programmer-defined functions
+- `DIM` v,... Allows dimensioning arrays
+- `END` Is required
+- `GOSUB` i Does a GOTO to a subroutine
+- `GOTO` i Transfers to another line-numbered statement
+- `FOR` v `=` e1 `TO` e2 `STEP` e3 Introduces the looping construct
+- `IF` e1 r e2 `THEN` i Gives a conditional `GOTO`
+- `LET` v `=` e Introduces the assignment statement, and is required
+- `NEXT` v Terminates the looping construct
+- `PRINT` e1,... Provides free-form output
+- `READ` v1,... Assigns values to variables from internal data
+- `REM` ... Provides comments
+- `RETURN` Returns from the end of the subroutine
+- `STOP` Same as reaching the END statement
+
+By taking advantage of the `CHAIN` technique we used in the `FUNPLOT` program, the first version of our compiler will result from the chaining of the following programs:
+
+- DABACO that just initializes data, next it chains to
+- DABACOCMD, which accepts commands and, when the `RUN` command is issued chains to
+- DABACORUN, that compiles the program into a StrayBasic program, whose last instruction is `CHAIN "DABACOCMD", which is chained to be executed. Thus we use StrayBasic as "object code".
+
+
+
+
+
+
+We'll use a fictional machine language in which Basic is compiled.
+
+Therefore we need to write:
+
+- REPL, the command interpreter that is also needed to edit/save/load the current program.
+- COMP, the actual compiler that translates from source code into an object code.
+- RT, a runtime environment to execute object code.
+
+The data needed by those three software modules are:
+
+- The source program, stored in a string array PROG$()
+- The object program, stored in a numerical array CODE()
+- The symbol table, where metadata about code variables are stored.
+
+The structure of our program will be as follows:
+
+    REPL module: lines from 10 to 999
+    COMP module: lines from 1000 to 5999
+    RT module: lines from 6000 to 9999
+
+
+1 REM File DABACO.BAS, version 2, author Paolo Caressa
+10 REM Dartmouth Basic Compiler.
+15 REM (c) 2025 by Paolo Caressa
+
+89 REM Useful function definitions
+90 DEF ISDIG(X$) = X$ >= "0" AND X$ <= "9"
+91 DEF ISLET(X$) = (X$ >= "A" AND X$ <= "Z") OR (X$ >= "a" AND X$ <= "z")
+91 DEF ISALN(X$) = (X$ >= "0" AND X$ <= "9") OR (X$ >= "A" AND X$ <= "Z") OR (X$ >= "a" AND X$ <= "z")
+
+100 REM Program data
+110 LET PMAX = 1024 ' Max number of program lines
+112 DIM P$(PMAX)    ' Program lines, including line numbers.
+114 LET PNEXT = 1   ' First free item in P$()
+120 LET CMAX = 2048 ' Max size of object code
+122 DIM C(CMAX)     ' Object code
+124 LET CNEXT = 1   ' First free item in C()
+130 LET T$ = ""     ' Terminal input line
+
+200 REM Looks for a line with number L: if found return in I0 its index in P$
+201 REM else retun -1 in I0
+205 LET X0$ = STR$(L): LET X0 = LEN X0$
+210 FOR I0 = 1 to PNEXT - 1: IF X0$ = P$(I0)(TO X0) THEN RETURN
+220 NEXT I0
+230 LET I0 = -1
+240 RETURN
+
+500 REM REPL module
+510 PRINT ">";: LINPUT T$: IF LEN T$ = 0 THEN REPEAT
+520 IF NOT ISDIGIT(T$(1)) THEN  ' Command to execute
+525 REM Line insertion/deletion/updating: get the line.
+530 FOR I = 2 TO LEN T$: IF ISDIGIT(T$(I)) THEN NEXT I
+535 LET L = VAL(T$(TO I-1))
+540 IF L > LEN T$ THEN  ' Line deletion
+545 GOSUB ???  ' Looks for line L in string T$
+550 IF Y0 > 0 THEN      ' Line update
+555 ' Line insertion
+560 IF Y0 = PNEXT THEN  ' No need to shift lines after
+565 REM Move lines 
+
+
+
+
 
