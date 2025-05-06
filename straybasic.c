@@ -148,13 +148,35 @@ struct {
 #define ERROR(e) longjmp(rt.err_buffer, rt.error = (ERROR_##e));
 #define EXPECT(tok, msg) if (RAM[IP++] != tok) ERROR(msg)
 
+#include <termios.h>
+#include <unistd.h>
+///  Get pressed key: Linux specific!
+char rt_inkey(void) {
+    static struct termios term;
+    tcgetattr(STDIN_FILENO, &term);
+    // Save c_lflags.
+    tcflag_t c_lflag_saved = term.c_lflag;
+    int vmin_saved = term.c_cc[VMIN];
+    int vtime_saved = term.c_cc[VTIME];
+    // No waiting mode, no echo, ignore break.
+    term.c_lflag &= ~(ICANON | ECHO | ISIG);
+    term.c_cc[VMIN] = 0;
+    term.c_cc[VTIME] = 0;
+    tcsetattr(0, TCSANOW, &term);
+    char ch = '\0';
+    read(STDIN_FILENO, &ch, 1);
+    term.c_lflag = c_lflag_saved;
+    term.c_cc[VMIN] = vmin_saved;
+    term.c_cc[VTIME] = vtime_saved;
+    tcsetattr(STDIN_FILENO, TCSANOW, &term);
+    return ch;
+}
+
 void rt_ctrlbreak(int sig) {
     // ERROR works only inside a program...
     if (rt.ip0 == rt.obj) IP = NIL;
-    else {
-        switch (sig) {
-            case SIGINT: ERROR(BREAK);
-}}}
+    else if (sig == SIGINT) ERROR(BREAK);
+}
 
 /** Initialize a virtual ram. */
 void rt_init(void) {
@@ -217,6 +239,7 @@ void rt_reset(int flags) {
         // Reset data pointer: points to the first token of the first line.
         rt.data_next = rt.pp0 + 2 + sizeof(addr_t);
         rt.vp = rt.vp0;     // Drop all variables.
+        rt.rsp = rt.rsp0;   // Reset return stack.
     }
     if (flags & RT_RESET_PROG) {
         rt.pp = rt.pp0;
@@ -549,28 +572,6 @@ str_t oper_concat(str_t s1, str_t s2) {
     return addr;
 }
 
-#include <termios.h>
-///  Get pressed key: Linux specific!
-char oper_inkey(void) {
-    static int c1 = -1, c2 = -1;
-    int c;
-    if (c1 > -1) {
-        c = c1;
-        c1 = c2;
-        c2 = -1;
-    } else {
-        struct termios prev, curr;
-        tcgetattr(0, &prev);
-        curr = prev;                        // Init new settings.
-        curr.c_lflag &= ~(ICANON | ECHO);   // Change settings.
-        tcsetattr(0, TCSANOW, &curr);       // Set up non waiting mode.
-        c = getchar();
-        if (c == 27) { c1 = getchar(); c2 = getchar(); }
-        tcsetattr(0, TCSANOW, &prev);       // Restore waiting mode.
-    }
-    return c;
-}
-
 void OPER_ABS(void) { push_num(fabs(pop_num())); }
 
 void OPER_ACS(void) {
@@ -652,8 +653,13 @@ void OPER_IDIV(void) {
     push_num(d.quot);
 }
 
+void OPER_INKEY(void) { push_num(rt_inkey()); }
+
 void OPER_INKEYS(void) {
-    push_num(oper_inkey());
+    int c;
+    while ((c = rt_inkey()) == 0)
+        ;
+    push_num(c);
     OPER_CHRS();
 }
 
@@ -1213,7 +1219,6 @@ void assign_string(addr_t v, str_t va, str_t s) {
 /** Parse "= expr" and assign the value to the variable of given type, at
     address v and whose value is at address va. */
 void assign_expr(int type, addr_t v, addr_t va) {
-    addr_t token_dump(addr_t, FILE*);
     if (type == VAR_NONE) ERROR(UNDEFINED_VARIABLE);
     EXPECT(CODE_EQ, ASSIGNMENT);
     expr();
@@ -1267,41 +1272,49 @@ addr_t assign_item(addr_t b) {
 /// \defgroup TOKEN Lexical Analyzer
 /// \{
 
-/// Print a token at address a on file f: return the address of next token.
+/** Print a token at address a on file f: return the address of next token
+    or NIL if the printed token is '\0' (the end of the line). */
 addr_t token_dump(addr_t a, FILE *f) {
     static int space = 0;   // 1 if a space should be printed in advance.
-    byte_t b = RAM[a++];
+    byte_t b = RAM[a];
+    if (b == 0) {
+        space = 0;
+        return NIL;
+    }
+    ++ a;
     if (b == CODE_IDN || b == CODE_IDNS) {
         if (space) fputc(' ', f);
         fprintf(f, "%s", RAM + PEEK(a));
-        a += 2;
-        space = 0;
+        a += sizeof(addr_t);
+        space = 1;
     } else if (b == CODE_INTLIT) {
         if (space) fputc(' ', f);
         fprintf(f, "%i", PEEK(a));
-        a += 2;
-        space = 0;
+        a += sizeof(addr_t);
+        space = 1;
     } else if (b == CODE_NUMLIT) {
         if (space) fputc(' ', f);
         fprintf(f, "%g", PEEK_NUM(a));
         a += sizeof(num_t);
-        space = 0;
+        space = 1;
     } else if (b == CODE_STRLIT) {
         if (space) fputc(' ', f);
         fprintf(f, "\"%s\"", RAM + PEEK(a));
-        a += 2;
-        space = 0;
+        a += sizeof(str_t);
+        space = 1;
     } else if (b == '\'') {
         if (space) fputc(' ', f);
         fputs(RAM + a - 1, f);
         a += strlen(RAM + a);   // points to the ending '\0'
         space = 0;
     } else if (b > CODE_STARTOPERATOR && b < CODE_ENDOPERATOR) {
-        fprintf(f, " %s", Operators[b - CODE_STARTOPERATOR - 1].name);
+        if (space) fputc(' ', f);
+        fprintf(f, "%s", Operators[b - CODE_STARTOPERATOR - 1].name);
         space = 1;
     } else if (b > CODE_STARTKEYWORD && b < CODE_ENDKEYWORD) {
+        if (space) fputc(' ', f);
         if (f == stderr) fputs("\033[1m", stderr);  // Bold blue
-        fprintf(f, " %s", Keywords[b - CODE_STARTKEYWORD - 1]);
+        fprintf(f, "%s", Keywords[b - CODE_STARTKEYWORD - 1]);
         if (f == stderr) fputs("\033[22m", stderr);  // Not bold
         if (b == CODE_DATA || b == CODE_REM) {
             fputs(RAM + a, f);
@@ -1310,18 +1323,9 @@ addr_t token_dump(addr_t a, FILE *f) {
         } else {
             space = 1;
         }
-    } else if (b != 0) {
-        if (b == '(' || b == ')') {
-            fputc(b, f);
-            space = 0;
-        } else if (b == ',' || b == ';' || b == ':') {
-            fputc(b, f);
-            space = 1;
-        } else {
-            fputc(b, f);
-            space = 0;
-    }} else {
-        space = 0;
+    } else {
+        fputc(b, f);
+        space = b == ',' || b == ';' || b == ':';
     }
     return a;
 }
@@ -1597,14 +1601,12 @@ int prog_load(const char *name) {
 /** Print the program on a file: if the file is stdout, some frills are used to
     list the instruction, namely bold keywords, italic operators, etc. */
 void prog_print(FILE *f) {
-    addr_t p = rt.pp0;
-    while (p < rt.pp) {
-        fprintf(f, "%4i", PEEK(LINE_NUM(p)));
-        p = LINE_TEXT(p);
-        while (RAM[p] != 0)
-            p = token_dump(p, f);
+    for (addr_t p = rt.pp0; p < rt.pp; p += RAM[p]) {
+        fprintf(f, "%4i ", PEEK(LINE_NUM(p)));
+        addr_t p1 = LINE_TEXT(p);
+        while ((p1 = token_dump(p1, f)) != NIL)
+            ;
         fputc('\n', f);
-        ++ p;
 }}
 
 /** Keep scanning lines from a file and interpreting them either as insertion
@@ -2167,8 +2169,7 @@ int instr_exec(void) {
     // Save the current exception buffer, since instr_exec may recurse.
     jmp_buf error_saved;
     memcpy(error_saved, rt.err_buffer, sizeof(jmp_buf));
-Again:
-    rt_reset(0);    // Reset only volatile data (stacks, etc.).
+    rt_reset(0);    // Reset volatile data (stacks, etc.).
     if (setjmp(rt.err_buffer) == 0) {
         volatile byte_t opcode;
         // Skip possible instruction separators.
@@ -2176,7 +2177,8 @@ Again:
         // Trace statement execution if required.
         if (rt.trace) {
             fprintf(stderr, "\nEXECUTE % 4i ", PEEK(LINE_NUM(rt.ip0)));
-            for (addr_t p = IP; RAM[p] != 0; p = token_dump(p, stderr))
+            addr_t p = IP;
+            while ((p = token_dump(p, stderr)) != NIL)
                 ;
             fputc('\n', stderr);
         }
