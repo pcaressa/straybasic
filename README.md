@@ -1,4 +1,4 @@
-![StrayBasic](straybasic.jpeg "Title")
+![StrayBasic](doc/straybasic.jpeg "Title")
 
 ## A street Basic imaginary dialect
 
