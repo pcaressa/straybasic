@@ -379,7 +379,7 @@ Actually, as in most street Basics, the `LET` keyword can be omitted, even if cl
 
 In any case, we can evaluate an expression containing variables only if all those variables have assigned values. A variable's name should start with a letter, followed by letters or digits: valid names are `a`, `a1`, `a11`, `a1a1`, `a1a` etc. Variable's names are case insensitive and always converted to uppercase. Moreover, *variable names cannot be equal to any language keyword*: the list of keywords, denoting instructions or functions, is the following one:
 
-    ABS ACS AND ASC ASN AT ATN ATTR BYE CHAIN CHR$ CLEAR CLOSE CLS COS DATA DEF DIM DUMP END ERROR EXP FOR GO GOSUB GOTO IF INKEY$ INPUT INT LEFT$ LEN LET LINPUT LIST LOAD LOG MERGE MID$ NEW NEXT NOT ON OPEN OR PRINT RANDOMIZE READ REM REPEAT RESTORE RETURN RIGHT$ RND RUN SAVE SGN SIN SKIP SQR STEP STOP STR$ SUB$ SYS TAB TAN THEN TO TRACE VAL
+    ABS ACS AND ASC ASN AT ATN ATTR BYE CHAIN CHR$ CLEAR CLOSE CLS COL COS DATA DEF DIM DIV DUMP END EOF ERR ERROR EXP FOR GOSUB GOTO IF INKEY INKEY$ INPUT INT LEFT$ LEN LET LINPUT LIST LOAD LOG MERGE MID$ MOD NEW NEXT NOT ON OPEN OR PRINT RANDOMIZE READ REM REPEAT RESTORE RETURN RIGHT$ RND ROW RUN SAVE SGN SIN SKIP SQR STEP STOP STR$ SUB$ SYS TAB TAN THEN TIME TO TRACE VAL
 
 One can overwrite the current value of a variable reassigning it:
 
@@ -604,14 +604,13 @@ Two final remarks on the `GOTO` instruction as implemented by the StrayBasic int
 
 As it is said time and again in the 60s and 70s books on programming, misuse of `GOTO`s can lead to *spaghetti code*: for example, let us consider the task to check whether a number is divisible by 2, 3, 5, or 7 and, in this case, to divide it and do the same on the quotient, until no check gives a positive result. A simple minded approach would be
 
-
-10 INPUT N
-20 LET X = N / 3
-30 IF X = N THEN N = X: GOTO 20
-35 LET X = N / 5
-40 IF X = N THEN N = X: GOTO 20
-45 LET X = N / 7
-50 IF X = N THEN N = X: GOTO 20
+	10 INPUT N
+	20 LET X = N / 3
+	30 IF X = N THEN N = X: GOTO 20
+	35 LET X = N / 5
+	40 IF X = N THEN N = X: GOTO 20
+	45 LET X = N / 7
+	50 IF X = N THEN N = X: GOTO 20
 
 ### For loops
 
@@ -665,35 +664,32 @@ As a first example, let us compute the n-th Fibonacci number: recall that Fibona
 
 so the sequence is 1, 1, 2, 3, 5, 8, 13, 21, ... Let us write a program to compute and print F(n):
 
-```
-  10 REM Compute Fibonacci numbers
-  20 INPUT "N =", N
-  30 LET E = 1
-  35 LET F = 1
-  40 LET I = 2
-  50 LET E1 = F
-  60 LET F = E + F
-  70 LET E = E1
-  80 LET I = I + 1
-  90 IF I < N THEN 50
- 100 PRINT "F(";N;") = ";F
-```
+      10 REM Compute Fibonacci numbers
+      20 INPUT "N =", N
+      30 LET E = 1
+      35 LET F = 1
+      40 LET I = 2
+      50 LET E1 = F
+      60 LET F = E + F
+      70 LET E = E1
+      80 LET I = I + 1
+      90 IF I < N THEN 50
+     100 PRINT "F(";N;") = ";F
+
 The statement `REM` is just a comment and it is ignored during program execution. At line 20, the program uses the `INPUT` statement to print a prompt and ask for the value of a numerical variable N. Next, the program keeps on computing elements of the sequence until the N-th has been computed; then, it prints this number. The variable E1 is used at line 50 to save the value of F which is overwritten at line 60 but needed as new value of E at line 70. So, E = F(I-1) and F = F(I) and F(I+1) will be computed as E + F.
 
 This loop uses a conditional jump and can be conveniently substituted by a FOR-loop:
 
-```
-  10 REM Compute Fibonacci numbers
-  20 INPUT "N =", N
-  30 LET E = 1
-  35 LET F = 1
-  40 FOR I = 2 TO N
-  50    LET E1 = F
-  60    LET F = E + F
-  70    LET E = E1
-  80 NEXT I
- 100 PRINT "F(";N;") = ";F
-```
+      10 REM Compute Fibonacci numbers
+      20 INPUT "N =", N
+      30 LET E = 1
+      35 LET F = 1
+      40 FOR I = 2 TO N
+      50    LET E1 = F
+      60    LET F = E + F
+      70    LET E = E1
+      80 NEXT I
+     100 PRINT "F(";N;") = ";F
 
 (the indentation will be lost when the lines will be typed in the interpreter). 
 
@@ -904,19 +900,21 @@ Indeed, a number takes 4 bytes, so that data for a 200x100 array amounts to 80,0
 To check available memory use the `DUMP` statement, that prints information on the state of the system: just after the interpreter has been launched this is its output:
 
     >dump
-    KEYWORDS:
-        ATTR BYE CHAIN CLEAR CLOSE CLS DATA DEF DIM DUMP END ERROR FOR GOSUB GOTO IF INPUT LET LINPUT LIST LOAD MERGE NEW NEXT ON OPEN PRINT RANDOMIZE READ REM REPEAT RESTORE RETURN RUN SAVE SKIP STEP STOP SYS THEN TO TRACE
-    OPERATORS:
-        # & * + - - / < <= <> = > >= ABS ACS AND ASC ASN AT ATN CHR$ COS DIV EOF EXP INKEY$ INT LEFT$ LEN LOG MID$ MOD NOT OR RIGHT$ RND SGN SIN SQR STR$ SUB$ TAB TAN VAL ^
-    MEMORY:
-       STRINGS = 0/4096 ( 0%); PROGRAM = 0/8192 ( 0%); VARIABLES = 0/51532 ( 0%)
-    MEMORY MAP:
-        | strings | program | variables | free space | stacks | buffers |
-      0000      1000      3000        3000         F94C     FA00      FFFF
-    STRINGS:
-    VARIABLES:
-    CHANNELS:
-        #0 FREE. #1 FREE. #2 FREE. #3 FREE. #4 FREE.
+	KEYWORDS:
+		ATTR BYE CHAIN CLEAR CLOSE CLS DATA DEF DIM DUMP END ERROR FOR GOSUB GOTO IF INPUT LET LINPUT LIST LOAD MERGE NEW NEXT ON OPEN PRINT RANDOMIZE READ REM REPEAT RESTORE RETURN RUN SAVE SKIP STEP STOP SYS THEN TO TRACE
+	OPERATORS:
+		& * + - - / < <= <> = > >= ABS ACS AND ASC ASN AT ATN CHR$ COL COS DIV EOF ERR EXP INKEY INKEY$ INT LEFT$ LEN LOG MID$ MOD NOT OR RIGHT$ RND ROW SGN SIN SQR STR$ SUB$ TAB TAN TIME VAL ^
+	MEMORY:
+	   STRINGS = 0/4096 ( 0%); PROGRAM = 0/8192 ( 0%); VARIABLES = 0/51532 ( 0%)
+	MEMORY MAP:
+		| strings | program | variables | free space | stacks | buffers |
+	  0000      1000      3000        3000         F94C     FA00      FFFF
+	REGISTERS:
+		IP = FA02, PP = 1000, VP = 3000, SP = F94C, RP = F9C4
+	STRINGS:
+	VARIABLES:
+	CHANNELS:
+		#0 FREE. #1 FREE. #2 FREE. #3 FREE. #4 FREE.
     >
 
 The `DUMP` instruction lists all statement keywords and all operators available in the Basic interpreter. Next, it prints how much memory is occupied / reserved for strings and identifiers, program and variables. Finally, the lists of string constants, variables and channels are printed.
@@ -925,21 +923,24 @@ Let us define a matrix and see what happens:
 
     >dim a(100,100)
     >dump
-    KEYWORDS:
-        ATTR BYE CHAIN CLEAR CLOSE CLS DATA DEF DIM DUMP END ERROR FOR GOSUB GOTO IF INPUT LET LINPUT LIST LOAD MERGE NEW NEXT ON OPEN PRINT RANDOMIZE READ REM REPEAT RESTORE RETURN RUN SAVE SKIP STEP STOP SYS THEN TO TRACE
-    OPERATORS:
-        # & * + - - / < <= <> = > >= ABS ACS AND ASC ASN AT ATN CHR$ COS DIV EOF EXP INKEY$ INT LEFT$ LEN LOG MID$ MOD NOT OR RIGHT$ RND SGN SIN SQR STR$ SUB$ TAB TAN VAL ^
-    MEMORY:
-       STRINGS = 2/4096 ( 0%); PROGRAM = 0/8192 ( 0%); VARIABLES = 40009/51532 (77%)
-    MEMORY MAP:
-        | strings | program | variables | free space | stacks | buffers |
-      0000      1000      3000        CC49         F94C     FA00      FFFF
-    STRINGS:
-     "A"
-    VARIABLES:
-     A(100,100) = | 0 0 0 ...  0 ; 0 0 0 ...  0 ; 0 0 0 ...  0 ; ...  ; 0 0 0 ...  0 ;|
-    CHANNELS:
-        #0 FREE. #1 FREE. #2 FREE. #3 FREE. #4 FREE.    >
+	KEYWORDS:
+		ATTR BYE CHAIN CLEAR CLOSE CLS DATA DEF DIM DUMP END ERROR FOR GOSUB GOTO IF INPUT LET LINPUT LIST LOAD MERGE NEW NEXT ON OPEN PRINT RANDOMIZE READ REM REPEAT RESTORE RETURN RUN SAVE SKIP STEP STOP SYS THEN TO TRACE
+	OPERATORS:
+		& * + - - / < <= <> = > >= ABS ACS AND ASC ASN AT ATN CHR$ COL COS DIV EOF ERR EXP INKEY INKEY$ INT LEFT$ LEN LOG MID$ MOD NOT OR RIGHT$ RND ROW SGN SIN SQR STR$ SUB$ TAB TAN TIME VAL ^
+	MEMORY:
+	   STRINGS = 2/4096 ( 0%); PROGRAM = 0/8192 ( 0%); VARIABLES = 40009/51532 (77%)
+	MEMORY MAP:
+		| strings | program | variables | free space | stacks | buffers |
+	  0000      1000      3000        CC49         F94C     FA00      FFFF
+	REGISTERS:
+		IP = FA02, PP = 1000, VP = CC49, SP = F94C, RP = F9C4
+	STRINGS:
+	 "A"
+	VARIABLES:
+	 A(100,100) = | 0 0 0 ...  0 ; 0 0 0 ...  0 ; 0 0 0 ...  0 ; ...  ; 0 0 0 ...  0 ;|
+	CHANNELS:
+		#0 FREE. #1 FREE. #2 FREE. #3 FREE. #4 FREE.
+    >
 
 Our 100x100 matrix occupies the 77% of available space for variables.
 
@@ -951,20 +952,22 @@ to assign s bytes for strings, p bytes for the program (the space for variables 
 
     >CLEAR 1024, 16384
     >DUMP
-    KEYWORDS:
-        ATTR BYE CHAIN CLEAR CLOSE CLS DATA DEF DIM DUMP END ERROR FOR GOSUB GOTO IF INPUT LET LINPUT LIST LOAD MERGE NEW NEXT ON OPEN PRINT RANDOMIZE READ REM REPEAT RESTORE RETURN RUN SAVE SKIP STEP STOP SYS THEN TO TRACE
-    OPERATORS:
-        # & * + - - / < <= <> = > >= ABS ACS AND ASC ASN AT ATN CHR$ COS DIV EOF EXP INKEY$ INT LEFT$ LEN LOG MID$ MOD NOT OR RIGHT$ RND SGN SIN SQR STR$ SUB$ TAB TAN VAL ^
-    MEMORY:
-       STRINGS = 2/1024 ( 0%); PROGRAM = 0/16384 ( 0%); VARIABLES = 0/46412 ( 0%)
-    MEMORY MAP:
-        | strings | program | variables | free space | stacks | buffers |
-      0000      0400      4400        4400         F94C     FA00      FFFF
-    STRINGS:
-     "A"
-    VARIABLES:
-    CHANNELS:
-        #0 FREE. #1 FREE. #2 FREE. #3 FREE. #4 FREE.
+	KEYWORDS:
+		ATTR BYE CHAIN CLEAR CLOSE CLS DATA DEF DIM DUMP END ERROR FOR GOSUB GOTO IF INPUT LET LINPUT LIST LOAD MERGE NEW NEXT ON OPEN PRINT RANDOMIZE READ REM REPEAT RESTORE RETURN RUN SAVE SKIP STEP STOP SYS THEN TO TRACE
+	OPERATORS:
+		& * + - - / < <= <> = > >= ABS ACS AND ASC ASN AT ATN CHR$ COL COS DIV EOF ERR EXP INKEY INKEY$ INT LEFT$ LEN LOG MID$ MOD NOT OR RIGHT$ RND ROW SGN SIN SQR STR$ SUB$ TAB TAN TIME VAL ^
+	MEMORY:
+	   STRINGS = 2/1024 ( 0%); PROGRAM = 0/16384 ( 0%); VARIABLES = 0/46412 ( 0%)
+	MEMORY MAP:
+		| strings | program | variables | free space | stacks | buffers |
+	  0000      0400      4400        4400         F94C     FA00      FFFF
+	REGISTERS:
+		IP = FA02, PP = 0400, VP = 4400, SP = F94C, RP = F9C4
+	STRINGS:
+	 "A"
+	VARIABLES:
+	CHANNELS:
+		#0 FREE. #1 FREE. #2 FREE. #3 FREE. #4 FREE.
     >
 
 Keep in mind that, when resizing either the constant string area or the program area, all data is lost, so that you cannot do that inside a program.
@@ -1487,25 +1490,26 @@ At line 160 we used the `INT` function with no parentheses: indeed, when the arg
 Finally, once we leave the program and it stops, the array `T$` contains the text we introduced, you can inspect it by `DUMP`:
 
     >dump
-    KEYWORDS:
-        ATTR BYE CHAIN CLEAR CLOSE CLS DATA DEF DIM DUMP END ERROR FOR GOSUB GOTO IF INPUT LET LINPUT LIST LOAD MERGE NEW NEXT ON OPEN PRINT RANDOMIZE READ REM REPEAT RESTORE RETURN RUN SAVE SKIP STEP STOP SYS THEN TO TRACE
-    OPERATORS:
-        # & * + - - / < <= <> = > >= ABS ACS AND ASC ASN AT ATN CHR$ COS DIV EOF EXP INKEY$ INT LEFT$ LEN LOG MID$ MOD NOT OR RIGHT$ RND SGN SIN SQR STR$ SUB$ TAB TAN VAL ^
-    MEMORY:
-       STRINGS = 251/4096 ( 6%); PROGRAM = 1284/8192 (15%); VARIABLES = 1085/51532 ( 2%)
-    MEMORY MAP:
-        | strings | program | variables | free space | stacks | buffers |
-      0000      1000      3000        343D         F94C     FA00      FFFF
-    STRINGS:
-     "N" "T$" "TOP" "A simple line editor" "0) Exit" "1) List the current buffer" "2) Append a line" "3) Delete a line" "4) Insert a line" "5) Update a line" "Choose a task" "C" "I" "[" "] " "OK" "Line Number? " "L" "Invalid line number!" "No more space for lines!" "?" "Line to insert? " "New line? "
-    VARIABLES:
-     N = 1024
-     T$(1024) = | "line 1" "" "" ...  ""|
-     TOP = 2
-     C = 0
-     I = 2 TO 1 STEP 1
-    CHANNELS:
-        #0 BUSY. #1 FREE. #2 FREE. #3 FREE. #4 FREE.
+	KEYWORDS:
+		ATTR BYE CHAIN CLEAR CLOSE CLS DATA DEF DIM DUMP END ERROR FOR GOSUB GOTO IF INPUT LET LINPUT LIST LOAD MERGE NEW NEXT ON OPEN PRINT RANDOMIZE READ REM REPEAT RESTORE RETURN RUN SAVE SKIP STEP STOP SYS THEN TO TRACE
+	OPERATORS:
+		& * + - - / < <= <> = > >= ABS ACS AND ASC ASN AT ATN CHR$ COL COS DIV EOF ERR EXP INKEY INKEY$ INT LEFT$ LEN LOG MID$ MOD NOT OR RIGHT$ RND ROW SGN SIN SQR STR$ SUB$ TAB TAN TIME VAL ^
+	MEMORY:
+	   STRINGS = 251/1024 (24%); PROGRAM = 1284/16384 ( 7%); VARIABLES = 1058/46412 ( 2%)
+	MEMORY MAP:
+		| strings | program | variables | free space | stacks | buffers |
+	  0000      0400      4400        4822         F94C     FA00      FFFF
+	REGISTERS:
+		IP = FA02, PP = 0904, VP = 4822, SP = F94C, RP = F9C4
+	STRINGS:
+	 "N" "T$" "TOP" "A simple line editor" "0) Exit" "1) List the current buffer" "2) Append a line" "3) Delete a line" "4) Insert a line" "5) Update a line" "Choose a task" "C" "I" "[" "] " "OK" "Line Number? " "L" "Invalid line number!" "No more space for lines!" "?" "Line to insert? " "New line? "
+	VARIABLES:
+	 N = 1024
+	 T$(1024) = | "" "" "" ...  ""|
+	 TOP = 1
+	 C = 0
+	CHANNELS:
+		#0 BUSY. #1 FREE. #2 FREE. #3 FREE. #4 FREE.
     >
 
 *En passant*, notice that loop variables are stored along with their start, end and step values. However, when speaking about files, we'll se below how to save the file we edited on the hard disk.
@@ -2570,153 +2574,4 @@ Try to use this editor to edit Basic programs: it'll be far more easy than by co
       0000      1000      3000        68E9         F94C     FA00      FFFF
     REGISTERS:
         IP = FA02, PP = 2BAA, VP = 68E9, SP = F94C, RP = F9C8
-
-### A neural network
-
-When I was 15 I bought a book that teached how to do AI on a microcomputer: it was written by Chris Naylor and was incredibly worth to read. Therein, I've had my first contact with a neural network, at the time the *backpropagation paper* by Hinton, Rumelhart &co was not yet published!
-
-So, some 40 years after, to write a neural network in Basic is too nice not to do it: hereinafter, you may find a (simple for modern standard) neural network running inside a 64K machine and written in Basic.
-
-The network has just one inner layer, and it is applied to a problem...........
-
-
-### A 2D game
-
-Most microcomputers where street Basic was available were intended for videogames: to do that, they relied on the machine-dependent equipment, that street Basic could access via special instructions (as the infamous `PEEK` and `POKE` that could read and write any memory location). StrayBasic is a virtual Basic, living inside a software running inside an OS perhaps deployed inside a virtual machine etc. so it can't provide such instructions and, in particular, it can't provide graphics. However, with a bit of imagination, we can implement a classic *space invaders* game with it. The key point is the possibility to print a character at a specific row and column in the terminal, via the `AT` function.
-
-You have to defend the planet against cold-war style alien invaders, by just shotting at them. On the left you'll see a cyan smudge which should represent the Earth; on its right a blue defender starship much like a sputnik and on the right of it, red aliens coming from right to left. Aliens are actually kamikazes: if they hit the blue defender the game is over and you lost.
-
-Martians will try to land on Earth and, when a martian does it destroys the piece of Earth on which it landed: if all the (visible) Earth is destroyed the game is over and you lost. You can shot aliens, and when you do it you lost energy, unless you hit the alien, in which case your energy increases. If you run out of energy the game is over and you lost. If you hit all aliens then you win.
-
-To move up the ship use the `q` key, to move it down use the `z` key, to shot press the space bar, to pause the game press `p`, to resume it press `o` and to stop it press `i`. The game is rough but it can be improved in several ways: you'll see on top of the screen your residual energy and some other information.
-
-The program store all elements in the screen into a string array `S$(i,j)`, and the color information into a numerical array `C(i,j)`. Martian data are stored in the array `M(i,j)`, where each row represents a martian and: `M(i,1)` is the x-coordinate, `M(i,2)` the y-coordinate, `M(i,3)` the energy of the martian which can be 1,2,3 and determines its velocity.
-
-
-### ABACO: A Basic compiler
-
-The final example will be a very non trivial one: I'll show you a complete compiler for the first version of the Basic programming language, the one released at Dartmouth College on May 1st 1964.
-
-The idea is to simulate the experience of using the first Basic version on the Dartmouth Time-Sharing System, as described in the first issued manual of the language [https://www.dartmouth.edu/basicfifty/basicmanual_1964.pdf](https://www.dartmouth.edu/basicfifty/basicmanual_1964.pdf). The user will be prompted to insert a program line or a command, much like is done in StreetBasic, but commands are not Basic statements, but commands of the Time-Sharing system:
-
-- `BYE`: end the session.
-- `LIST`: list the current program.
-- `NEW`: erase the current file.
-- `OLD`: load an already existing program from the disk.
-- `REPLACE`: save the current program on an already existing file, replacing it.
-- `RUN`: run the program.
-- `SAVE`: save the current program on a new file.
-- `UNSAVE`: delete a file from the directory.
-
-Some commands expect a parameter, typically a file name, which is prompted after the command is issued.
-
-The Basic version implemented is the very first one, which consists in the following statements:
-
-- `DATA` c,... Introduces internal data
-- `DEF FN`l`(`x`) =` e Introduces programmer-defined functions
-- `DIM` v,... Allows dimensioning arrays
-- `END` Is required
-- `GOSUB` i Does a GOTO to a subroutine
-- `GOTO` i Transfers to another line-numbered statement
-- `FOR` v `=` e1 `TO` e2 `STEP` e3 Introduces the looping construct
-- `IF` e1 r e2 `THEN` i Gives a conditional `GOTO`
-- `LET` v `=` e Introduces the assignment statement, and is required
-- `NEXT` v Terminates the looping construct
-- `PRINT` e1,... Provides free-form output
-- `READ` v1,... Assigns values to variables from internal data
-- `REM` ... Provides comments
-- `RETURN` Returns from the end of the subroutine
-- `STOP` Same as reaching the END statement
-
-I will provide two implementations of the Dartmouth Basic system: the first one takes advantage of the `CHAIN` command, and compile the program into a StrayBasic program which is then runned. The second version, translate the program into a pseudo-machine code which is executed by a subroutine.
-
-By taking advantage of the `CHAIN` technique we used in the `FUNPLOT` program, the first version of our compiler will result from the chaining of the following programs:
-
-- ABACO that just initializes data, next it chains to
-- ABACMD, which accepts commands and, when the `RUN` command is issued chains to
-- ABACRUN, that compiles the program into a StrayBasic program, whose last instruction is `CHAIN "ABACMD", which is chained to be executed. Thus we use StrayBasic as "object code".
-
-
-
-
-
-Now, let us provide another version of our compiler: in this case, the program will be translated into a sort of machine code, whose instructions are contained into a string array; a virtual machine to run this machine code will be provided in a subroutine.
-
-Therefore we need to write:
-
-- REPL, the command interpreter that is also needed to edit/save/load the current program.
-- COMP, the actual compiler that translates from source code into an object code.
-- RT, a runtime environment to execute object code.
-
-The data needed by those three software modules are:
-
-- The source program, stored in a string array PROG$()
-- The object program, stored in a numerical array CODE()
-- The symbol table, where metadata about code variables are stored.
-
-The structure of our program will be as follows:
-
-    REPL module: lines from 10 to 999
-    COMP module: lines from 1000 to 5999
-    RT module: lines from 6000 to 9999
-
-The object code is stored into a string array: each item of the array can be addressed by a JP instruction.
-
-Instructions:
-
-There are the following data areas
-
-- CON a 256 array where constants are stored
-- VAR a 256 array where scalar variables are stored
-- ARR a 4096 array where Basic arrays are stored
-
-MOV n   store into variable n the number in the accumulator
-LD n    load the number at location n into the accumulator
-ADD n   add the content of variable
-
-
-
-
-1 REM File DABACO.BAS, version 2, author Paolo Caressa
-10 REM Dartmouth Basic Compiler.
-15 REM (c) 2025 by Paolo Caressa
-
-89 REM Useful function definitions
-90 DEF ISDIG(X$) = X$ >= "0" AND X$ <= "9"
-91 DEF ISLET(X$) = (X$ >= "A" AND X$ <= "Z") OR (X$ >= "a" AND X$ <= "z")
-91 DEF ISALN(X$) = (X$ >= "0" AND X$ <= "9") OR (X$ >= "A" AND X$ <= "Z") OR (X$ >= "a" AND X$ <= "z")
-
-100 REM Program data
-110 LET PMAX = 1024 ' Max number of program lines
-112 DIM P$(PMAX)    ' Program lines, including line numbers.
-114 LET PNEXT = 1   ' First free item in P$()
-120 LET CMAX = 2048 ' Max size of object code
-122 DIM C(CMAX)     ' Object code
-124 LET CNEXT = 1   ' First free item in C()
-130 LET T$ = ""     ' Terminal input line
-
-200 REM Looks for a line with number L: if found return in I0 its index in P$
-201 REM else retun -1 in I0
-205 LET X0$ = STR$(L): LET X0 = LEN X0$
-210 FOR I0 = 1 to PNEXT - 1: IF X0$ = P$(I0)(TO X0) THEN RETURN
-220 NEXT I0
-230 LET I0 = -1
-240 RETURN
-
-500 REM REPL module
-510 PRINT ">";: LINPUT T$: IF LEN T$ = 0 THEN REPEAT
-520 IF NOT ISDIGIT(T$(1)) THEN  ' Command to execute
-525 REM Line insertion/deletion/updating: get the line.
-530 FOR I = 2 TO LEN T$: IF ISDIGIT(T$(I)) THEN NEXT I
-535 LET L = VAL(T$(TO I-1))
-540 IF L > LEN T$ THEN  ' Line deletion
-545 GOSUB ???  ' Looks for line L in string T$
-550 IF Y0 > 0 THEN      ' Line update
-555 ' Line insertion
-560 IF Y0 = PNEXT THEN  ' No need to shift lines after
-565 REM Move lines 
-
-
-
-
 

@@ -1,0 +1,9 @@
+10 REM Compute GCD
+15 INPUT "N="; N
+20 DIM F(N)
+30 LET F(1) = 1
+40 LET F(2) = 1
+50 FOR I = 3 TO N
+60 LET F(I) = F(I-2) + F(I-1)
+70 NEXT I
+80 PRINT F(N)
