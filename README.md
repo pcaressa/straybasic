@@ -15,7 +15,7 @@ The project was originally designed and implemented for a speech at the
 Codemotion Milan conference in 2024, commemorating the 60 years of the Basic
 programming language: I continued to work on the compiler also after the conference, fixing bugs and extending it up to a satisfying degree of completeness as far as the 80s standards are concerned.
 
-A tutorial and reference for StrayBasic is here [doc/straybasic.md](straybasic.md), while some samples in the [samples](samples) folder.
+A tutorial and reference for StrayBasic is here [doc/straybasic.md](doc/straybasic.md), while some samples in the [samples](samples) folder.
 
 Enjoy!
 
