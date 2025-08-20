@@ -558,7 +558,7 @@ The previous snippet can be rewrited as
     >110 PRINT "One": GOTO 200
     >120 PRINT "Two": GOTO 200
     >130 PRINT "Three": GOTO 200
-    >150 PRINT "I cannot name it!": GOTO >200
+    >150 PRINT "I cannot name it!": GOTO 200
     >200 END
     >run 
     Three
@@ -567,7 +567,6 @@ The check at line 20 is needed to prevent an error; for example, if we delete li
 
     >10 let x = 4
     >20
-    >list
     >list
       10 LET X = 4
       30 ON X + 1 GOTO 100, 110, 120, 130
@@ -604,13 +603,41 @@ Two final remarks on the `GOTO` instruction as implemented by the StrayBasic int
 
 As it is said time and again in the 60s and 70s books on programming, misuse of `GOTO`s can lead to *spaghetti code*: for example, let us consider the task to check whether a number is divisible by 2, 3, 5, or 7 and, in this case, to divide it and do the same on the quotient, until no check gives a positive result. A simple minded approach would be
 
-	10 INPUT N
-	20 LET X = N / 3
-	30 IF X = N THEN N = X: GOTO 20
-	35 LET X = N / 5
-	40 IF X = N THEN N = X: GOTO 20
-	45 LET X = N / 7
-	50 IF X = N THEN N = X: GOTO 20
+    10 INPUT N
+    20 LET X = N / 2
+    30 IF 2*X <> N THEN 50
+    40 N = X
+    50 LET X = N / 3
+    60 IF 3*X <> N THEN 80
+    70 N = X
+    80 LET X = N / 5
+    90 IF 5*X <> N THEN 110
+   100 N = X
+   110 LET X = N / 7
+   120 IF 7*X <> N THEN 150
+   130 N = X
+   140 GOTO 20
+   150 PRINT N
+
+This code can be rewrited by using loops, arrays and other facilities of the language: for the moment, let us rewrite it as
+
+    10 INPUT N
+    20 LET X = N / 2: IF 2*X = N THEN N = X: GOTO 20
+    30 LET X = N / 3: IF 3*X = N THEN N = X: GOTO 20
+    40 LET X = N / 5: IF 5*X = N THEN N = X: GOTO 20
+    50 LET X = N / 7: IF 7*X = N THEN N = X: GOTO 20
+    60 PRINT N
+
+We still have `GOTO`s, but toward a single line number. Moreover, on introducing an auxiliary variable, we can collapse all `GOTO`s to a single one:
+
+    10 INPUT N
+	15 LET N1 = N
+    20 LET X = N / 2: IF 2*X = N THEN N = X
+    30 LET X = N / 3: IF 3*X = N THEN N = X
+    40 LET X = N / 5: IF 5*X = N THEN N = X
+    50 LET X = N / 7: IF 7*X = N THEN N = X
+	55 IF N <> N1 THEN 15
+    60 PRINT N
 
 ### For loops
 
@@ -727,7 +754,7 @@ Notice that this loop cannot be written as a `FOR` loop, since we do not know in
 
 **Exercise for the reader** Combine the programs for the Fibonacci numbers and the GCD to compute the gcd of two Fibonacci numbers: try to compute some gcds and formulate a conjecture about all that.
 
-#### Monte Carlo computation of pair
+#### Monte Carlo computation of pi
 
 The classic Monte Carlo method, invented more or less when computers were, can be used in a simple form to approximate the pi number. Recall that pi is the ratio between the circumference of a circle and its diameter. How can we approximate it?
 
@@ -863,6 +890,31 @@ Once declared, elements of a vector or of a matrix can be assigned, for example:
     10 DIM V(10), A(10,20)
     20 LET V(1) = 1
     30 LET A(2,3) = 2
+
+Let us rewrite the previous stupid program to check whether a number is divisible by 2, 3, 5 or 7 and to print the reduced numbers by trading program space for arrays: recall that the program was
+
+    10 INPUT N
+	15 LET N1 = N
+    20 LET X = N / 2: IF 2*X = N THEN N = X
+    30 LET X = N / 3: IF 3*X = N THEN N = X
+    40 LET X = N / 5: IF 5*X = N THEN N = X
+    50 LET X = N / 7: IF 7*X = N THEN N = X
+	55 IF N <> N1 THEN 15
+    60 PRINT N
+
+Now write:
+
+    10 DIM A(4)
+    20 LET A(1) = 2: LET A(2) = 3: LET A(3) = 5: LET A(4) = 7
+    30 INPUT N
+    40 LET N1 = N
+    50 FOR I = 1 TO 4
+    60 LET X = N / A(I): IF A(I)*X = N THEN N = X
+	70 NEXT I
+ 	80 IF N <> N1 THEN 40
+    90 PRINT N
+
+This program is easier to modify: if we want to add more divisors to check against, we just modify the array and the `FOR` statement.
 
 In general, to assign a value to each element a `FOR` loop is used: for example, let us rewrite our Fibonacci program:
 
