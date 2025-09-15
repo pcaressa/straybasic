@@ -603,21 +603,21 @@ Two final remarks on the `GOTO` instruction as implemented by the StrayBasic int
 
 As it is said time and again in the 60s and 70s books on programming, misuse of `GOTO`s can lead to *spaghetti code*: for example, let us consider the task to check whether a number is divisible by 2, 3, 5, or 7 and, in this case, to divide it and do the same on the quotient, until no check gives a positive result. A simple minded approach would be
 
-    10 INPUT N
-    20 LET X = N / 2
-    30 IF 2*X <> N THEN 50
-    40 N = X
-    50 LET X = N / 3
-    60 IF 3*X <> N THEN 80
-    70 N = X
-    80 LET X = N / 5
-    90 IF 5*X <> N THEN 110
-   100 N = X
-   110 LET X = N / 7
-   120 IF 7*X <> N THEN 150
-   130 N = X
-   140 GOTO 20
-   150 PRINT N
+     10 INPUT N
+     20 LET X = N / 2
+     30 IF 2*X <> N THEN 50
+     40 N = X
+     50 LET X = N / 3
+     60 IF 3*X <> N THEN 80
+     70 N = X
+     80 LET X = N / 5
+     90 IF 5*X <> N THEN 110
+    100 N = X
+    110 LET X = N / 7
+    120 IF 7*X <> N THEN 150
+    130 N = X
+    140 GOTO 20
+    150 PRINT N
 
 This code can be rewrited by using loops, arrays and other facilities of the language: for the moment, let us rewrite it as
 
